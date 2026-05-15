@@ -1,188 +1,238 @@
 """
-Mengambil tweet dari Twitter/X API v2 menggunakan Tweepy.
+Mengambil konten dari media sosial: Telegram publik & YouTube.
 
-Strategi:
-- Search recent tweets dengan query keyword per kategori.
-- Filter tweet berbahasa Indonesia.
-- Simpan teks mentah ke data/raw/tweets.csv untuk diproses sentiment.py.
-- Jika bearer token tidak ada, gunakan data sampel untuk dev/testing.
+Sumber yang berfungsi tanpa API berbayar:
+- Telegram: scrape t.me/s/<channel> (web preview publik)
+- YouTube:  YouTube Data API v3 (gratis, butuh YOUTUBE_API_KEY di .env)
+- Twitter:  sudah tercakup via Google News RSS di collect_news.py
+
+Simpan ke data/raw/social.csv
 """
 
 import os
+import re
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)  # type: ignore
 
 load_dotenv()
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; crime-health-map/1.0)"}
 
 # ---------------------------------------------------------------------------
-# Query pencarian per kategori (operator Twitter API v2)
+# Kata kunci per kategori
 # ---------------------------------------------------------------------------
-SEARCH_QUERIES = {
-    "kriminalitas": (
-        "(kriminal OR pencurian OR pembunuhan OR begal OR narkoba OR kejahatan) "
-        "lang:id -is:retweet"
-    ),
-    "kekerasan_seksual": (
-        "(\"kekerasan seksual\" OR \"pelecehan seksual\" OR kdrt OR "
-        "\"kekerasan perempuan\" OR \"kekerasan anak\") "
-        "lang:id -is:retweet"
-    ),
-    "penyakit_menular": (
-        "(DBD OR \"demam berdarah\" OR TBC OR malaria OR wabah OR "
-        "\"penyakit menular\" OR hepatitis) "
-        "lang:id -is:retweet"
-    ),
+KEYWORDS = {
+    "kriminalitas":      ["kriminal", "pencurian", "pembunuhan", "narkoba", "begal",
+                          "korupsi", "ditangkap", "tersangka", "kejahatan"],
+    "kekerasan_seksual": ["kekerasan seksual", "pelecehan", "kdrt", "rudapaksa",
+                          "kekerasan anak", "trafficking"],
+    "penyakit_menular":  ["DBD", "demam berdarah", "TBC", "malaria", "HIV", "wabah",
+                          "penyakit menular", "epidemi"],
 }
 
-MAX_RESULTS_PER_QUERY = 50  # maks 100 untuk Basic tier
-
-
-def _build_client():
-    """Buat Tweepy Client jika bearer token tersedia."""
-    try:
-        import tweepy
-        return tweepy.Client(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
-    except ImportError:
-        print("[collect_social] tweepy tidak terinstall.")
-        return None
-
-
-def fetch_tweets(kategori: str, max_results: int = MAX_RESULTS_PER_QUERY) -> list[dict]:
-    """
-    Ambil tweet terbaru untuk satu kategori.
-    Kembalikan list dict siap jadi DataFrame.
-    """
-    if not BEARER_TOKEN:
-        print(f"[collect_social] TWITTER_BEARER_TOKEN tidak diset, skip {kategori}.")
-        return []
-
-    client = _build_client()
-    if client is None:
-        return []
-
-    query = SEARCH_QUERIES[kategori]
-    print(f"[collect_social] Mencari tweet: {kategori} ...")
-
-    try:
-        import tweepy
-        response = client.search_recent_tweets(
-            query=query,
-            max_results=max_results,
-            tweet_fields=["created_at", "lang", "public_metrics", "geo"],
-            expansions=["geo.place_id"],
-            place_fields=["full_name", "country_code"],
-        )
-    except tweepy.TweepyException as e:
-        print(f"[collect_social] Error Twitter API: {e}")
-        return []
-
-    if not response.data:
-        print(f"[collect_social] Tidak ada tweet untuk {kategori}.")
-        return []
-
-    # Mapping place_id → nama tempat
-    places = {}
-    if response.includes and "places" in response.includes:
-        for place in response.includes["places"]:
-            places[place.id] = place.full_name
-
-    rows = []
-    for tweet in response.data:
-        geo_name = None
-        if tweet.geo and "place_id" in tweet.geo:
-            geo_name = places.get(tweet.geo["place_id"])
-
-        rows.append({
-            "tweet_id":   str(tweet.id),
-            "teks":       tweet.text,
-            "created_at": str(tweet.created_at),
-            "kategori":   kategori,
-            "lokasi_geo": geo_name,
-            "likes":      tweet.public_metrics.get("like_count", 0),
-            "retweets":   tweet.public_metrics.get("retweet_count", 0),
-            "sumber":     "twitter",
-            "scraped_at": datetime.now(timezone.utc).isoformat(),
-        })
-
-    print(f"[collect_social]   {len(rows)} tweet diperoleh untuk {kategori}.")
-    return rows
-
-
 # ---------------------------------------------------------------------------
-# Data sampel — digunakan saat token tidak tersedia (dev mode)
+# 1. TELEGRAM — scrape web preview channel publik
 # ---------------------------------------------------------------------------
-_SAMPLE_TWEETS = [
-    {"teks": "Polisi berhasil menangkap pelaku pencurian motor di Bandung, Jawa Barat. Tersangka sudah diamankan.", "kategori": "kriminalitas", "lokasi_geo": "Bandung, Jawa Barat"},
-    {"teks": "Kasus begal meningkat di wilayah Surabaya. Warga diminta waspada saat berkendara malam hari.", "kategori": "kriminalitas", "lokasi_geo": "Surabaya, Jawa Timur"},
-    {"teks": "Peredaran narkoba di Medan semakin mengkhawatirkan. BNN gelar operasi besar-besaran.", "kategori": "kriminalitas", "lokasi_geo": "Medan, Sumatera Utara"},
-    {"teks": "Kasus DBD di Jakarta meningkat drastis minggu ini. Dinkes DKI imbau warga bersihkan lingkungan.", "kategori": "penyakit_menular", "lokasi_geo": "Jakarta, DKI Jakarta"},
-    {"teks": "Wabah TBC masih jadi masalah serius di Jawa Barat. Ribuan pasien baru terdeteksi tahun ini.", "kategori": "penyakit_menular", "lokasi_geo": "Bandung, Jawa Barat"},
-    {"teks": "Kasus kekerasan seksual terhadap anak di Sulawesi Selatan dilaporkan meningkat. KPAI minta penanganan serius.", "kategori": "kekerasan_seksual", "lokasi_geo": "Makassar, Sulawesi Selatan"},
-    {"teks": "Pelaku penipuan online ditangkap polisi di Semarang. Korban tersebar di berbagai provinsi.", "kategori": "kriminalitas", "lokasi_geo": "Semarang, Jawa Tengah"},
-    {"teks": "Malaria kembali merebak di Papua. Kemenkes kirim tim medis dan obat-obatan ke daerah terpencil.", "kategori": "penyakit_menular", "lokasi_geo": "Jayapura, Papua"},
-    {"teks": "KDRT dilaporkan meningkat pasca pandemi di Bali. LBH perempuan catat kenaikan 30%.", "kategori": "kekerasan_seksual", "lokasi_geo": "Denpasar, Bali"},
-    {"teks": "Pembunuhan di Medan, pelaku masih dalam pengejaran polisi. Korban ditemukan di pinggiran kota.", "kategori": "kriminalitas", "lokasi_geo": "Medan, Sumatera Utara"},
+TELEGRAM_CHANNELS = [
+    "kompascom",
+    "liputan6dotcom",
+    "BNN_RI",       # Badan Narkotika Nasional
 ]
 
 
-def load_sample_tweets() -> list[dict]:
-    """Kembalikan data sampel tweet untuk mode development."""
-    print("[collect_social] Menggunakan data sampel tweet (mode dev).")
+def _detect_kategori(teks: str) -> Optional[str]:
+    teks_lower = teks.lower()
+    for kat in ["kekerasan_seksual", "kriminalitas", "penyakit_menular"]:
+        for kw in KEYWORDS[kat]:
+            if kw.lower() in teks_lower:
+                return kat
+    return None
+
+
+def scrape_telegram_channel(channel: str) -> list[dict]:
+    """Scrape pesan terbaru dari channel Telegram publik via web preview."""
+    url = f"https://t.me/s/{channel}"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=12, verify=False)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[social] Telegram @{channel} gagal: {e}")
+        return []
+
+    soup = BeautifulSoup(r.content, "html.parser")
     rows = []
-    for i, t in enumerate(_SAMPLE_TWEETS):
+
+    for msg_wrap in soup.find_all("div", class_="tgme_widget_message_wrap"):
+        teks_el = msg_wrap.find("div", class_="tgme_widget_message_text")
+        date_el = msg_wrap.find("time")
+        link_el = msg_wrap.find("a", class_="tgme_widget_message_date")
+
+        if not teks_el:
+            continue
+
+        teks = teks_el.get_text(separator=" ", strip=True)[:500]
+        tanggal = date_el.get("datetime", "") if date_el else ""
+        url_msg = link_el.get("href", "") if link_el else ""
+        kategori = _detect_kategori(teks)
+
+        if not kategori:
+            continue
+
         rows.append({
-            "tweet_id":   f"sample_{i:04d}",
-            "teks":       t["teks"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "kategori":   t["kategori"],
-            "lokasi_geo": t.get("lokasi_geo"),
-            "likes":      0,
-            "retweets":   0,
-            "sumber":     "sample",
+            "id":        url_msg.split("/")[-1] if url_msg else "",
+            "teks":      teks,
+            "tanggal":   tanggal,
+            "url":       url_msg,
+            "sumber":    f"telegram/@{channel}",
+            "platform":  "telegram",
+            "kategori":  kategori,
+            "likes":     0,
             "scraped_at": datetime.now(timezone.utc).isoformat(),
         })
+
+    print(f"[social] Telegram @{channel}: {len(rows)} pesan relevan dari {len(soup.find_all('div', class_='tgme_widget_message_wrap'))} total.")
     return rows
 
 
+def collect_telegram() -> list[dict]:
+    all_rows: list[dict] = []
+    for ch in TELEGRAM_CHANNELS:
+        rows = scrape_telegram_channel(ch)
+        all_rows.extend(rows)
+        time.sleep(1)
+    return all_rows
+
+
+# ---------------------------------------------------------------------------
+# 2. YOUTUBE — YouTube Data API v3 (butuh YOUTUBE_API_KEY)
+# ---------------------------------------------------------------------------
+YOUTUBE_QUERIES = {
+    "kriminalitas":      "kriminal pencurian narkoba Indonesia",
+    "kekerasan_seksual": "kekerasan seksual Indonesia berita",
+    "penyakit_menular":  "wabah penyakit menular Indonesia DBD TBC",
+}
+
+
+def fetch_youtube(kategori: str, max_results: int = 20) -> list[dict]:
+    """Cari video YouTube terbaru menggunakan YouTube Data API v3."""
+    if not YOUTUBE_API_KEY:
+        print(f"[social] YOUTUBE_API_KEY tidak diset, skip YouTube {kategori}.")
+        return []
+
+    query = YOUTUBE_QUERIES.get(kategori, "")
+    url = "https://www.googleapis.com/youtube/v3/search"
+    params = {
+        "part":        "snippet",
+        "q":           query,
+        "type":        "video",
+        "maxResults":  max_results,
+        "order":       "date",
+        "relevanceLanguage": "id",
+        "regionCode":  "ID",
+        "key":         YOUTUBE_API_KEY,
+    }
+
+    try:
+        r = requests.get(url, params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as e:
+        print(f"[social] YouTube API error ({kategori}): {e}")
+        return []
+
+    rows = []
+    for item in data.get("items", []):
+        snippet   = item.get("snippet", {})
+        video_id  = item.get("id", {}).get("videoId", "")
+        judul     = snippet.get("title", "")
+        deskripsi = snippet.get("description", "")[:300]
+        tanggal   = snippet.get("publishedAt", "")
+        channel   = snippet.get("channelTitle", "")
+        teks_cek  = judul + " " + deskripsi
+        kat       = _detect_kategori(teks_cek) or kategori
+
+        rows.append({
+            "id":        video_id,
+            "teks":      judul + ". " + deskripsi,
+            "tanggal":   tanggal,
+            "url":       f"https://www.youtube.com/watch?v={video_id}",
+            "sumber":    f"youtube/{channel}",
+            "platform":  "youtube",
+            "kategori":  kat,
+            "likes":     0,
+            "scraped_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    print(f"[social] YouTube {kategori}: {len(rows)} video.")
+    return rows
+
+
+def collect_youtube() -> list[dict]:
+    all_rows: list[dict] = []
+    for kat in YOUTUBE_QUERIES:
+        rows = fetch_youtube(kat)
+        all_rows.extend(rows)
+        time.sleep(0.5)
+    return all_rows
+
+
+# ---------------------------------------------------------------------------
+# 3. Entry point
+# ---------------------------------------------------------------------------
 def collect_social() -> pd.DataFrame:
-    """Entry point: ambil tweet semua kategori dan simpan ke CSV."""
+    """Kumpulkan data dari semua platform sosial yang tersedia."""
+    print("=" * 50)
+    print("[social] Mulai pengumpulan data media sosial ...")
+    print("=" * 50)
+
     all_rows: list[dict] = []
 
-    if BEARER_TOKEN:
-        for kategori in SEARCH_QUERIES:
-            rows = fetch_tweets(kategori)
-            all_rows.extend(rows)
-            time.sleep(2)  # hindari rate limit
-    else:
-        all_rows = load_sample_tweets()
+    print("\n[social] Scraping Telegram ...")
+    all_rows.extend(collect_telegram())
+
+    print("\n[social] Scraping YouTube ...")
+    yt_rows = collect_youtube()
+    all_rows.extend(yt_rows)
+    if not yt_rows:
+        print("[social] YouTube skip (tidak ada API key).")
+        print("[social] Untuk aktifkan: isi YOUTUBE_API_KEY di .env")
+        print("[social] Cara dapat key gratis: console.cloud.google.com -> YouTube Data API v3")
 
     if not all_rows:
-        print("[collect_social] Tidak ada tweet untuk disimpan.")
+        print("[social] Tidak ada data media sosial berhasil dikumpulkan.")
         return pd.DataFrame()
 
     df = pd.DataFrame(all_rows)
-    out = RAW_DIR / "tweets.csv"
 
+    out = RAW_DIR / "social.csv"
     if out.exists():
         existing = pd.read_csv(out)
         df = pd.concat([existing, df], ignore_index=True)
-        df = df.drop_duplicates(subset=["tweet_id"])
-        print(f"[collect_social] Total setelah merge: {len(df)} tweet.")
+        df = df.drop_duplicates(subset=["id", "platform"])
+        print(f"\n[social] Total setelah merge: {len(df)} entri.")
 
     df.to_csv(out, index=False)
-    print(f"[collect_social] Disimpan: {out}")
-    print("\n[collect_social] Ringkasan kategori:")
-    print(df["kategori"].value_counts().to_string())
+    print(f"[social] Disimpan: {out}")
+
+    print("\n[social] Ringkasan per platform:")
+    if "platform" in df.columns:
+        print(df.groupby(["platform", "kategori"]).size().to_string())
+
     return df
 
 
