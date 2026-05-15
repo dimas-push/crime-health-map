@@ -155,6 +155,29 @@ df_articles      = load_articles()
 df_crime_detail  = load_crime_detail()
 IS_DUMMY = not (PROCESSED_DIR / "final.csv").exists()
 
+# Hitung statistik dari berita scraping (bukan data statis)
+def _news_stats(kategori: str) -> dict:
+    """Statistik berbasis artikel berita yang ter-geocode per provinsi."""
+    if df_articles.empty:
+        return {"total": 0, "top": [], "per_prov": {}}
+    sub = df_articles[df_articles["kategori"] == kategori].copy()
+    per_prov = (
+        sub.groupby("provinsi").size().reset_index(name="jumlah")
+        if "provinsi" in sub.columns else pd.DataFrame()
+    )
+    top5 = (
+        per_prov.nlargest(5, "jumlah")[["provinsi", "jumlah"]].values.tolist()
+        if not per_prov.empty else []
+    )
+    return {
+        "total": int(len(sub)),
+        "top":   [[str(r[0]), int(r[1])] for r in top5],
+        "per_prov": per_prov.set_index("provinsi")["jumlah"].to_dict()
+        if not per_prov.empty else {},
+    }
+
+news_stats = {k: _news_stats(k) for k in LAYERS}
+
 # Sub-layer kriminalitas per jenis kejahatan
 CRIME_TYPES = {
     "pencurian":      {"label": "PENCURIAN",       "neon": "#ff9900"},
@@ -394,12 +417,13 @@ stats = {
     for key in LAYERS
 }
 
-maps_json           = json.dumps(maps)
-crime_type_maps_json = json.dumps(crime_type_maps)
+maps_json             = json.dumps(maps)
+crime_type_maps_json  = json.dumps(crime_type_maps)
 crime_type_stats_json = json.dumps(crime_type_stats)
-stats_json     = json.dumps(stats)
-layers_json    = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
-sentimen_json  = json.dumps(sentimen_summary)
+stats_json            = json.dumps(stats)
+news_stats_json       = json.dumps(news_stats)
+layers_json           = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
+sentimen_json         = json.dumps(sentimen_summary)
 data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
 data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
 
@@ -619,19 +643,47 @@ HTML = f"""<!DOCTYPE html>
     {render_sidebar_buttons()}
 
     <hr class="div"/>
-    <div class="sec">// STATISTIK NASIONAL</div>
+    <div class="sec">// DATA ESTIMASI BPS 2023
+      <span style="color:#ffaa00;font-size:0.5rem;margin-left:4px;">&#9888; STATIS</span>
+    </div>
+    <div style="font-size:0.58rem;color:rgba(255,180,0,0.5);padding:0 4px 6px;line-height:1.5;">
+      Angka ini adalah <b style="color:#ffaa00">estimasi</b> berdasarkan<br/>
+      proporsi populasi, bukan data BPS asli.
+    </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-lbl">TOTAL</div><div class="stat-val" id="s-total">—</div></div>
       <div class="stat-card"><div class="stat-lbl">RATA-RATA</div><div class="stat-val" id="s-avg">—</div></div>
       <div class="stat-card"><div class="stat-lbl">TERTINGGI</div><div class="stat-val" id="s-max">—</div></div>
       <div class="stat-card"><div class="stat-lbl">TERENDAH</div><div class="stat-val" id="s-min">—</div></div>
     </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">
+      Top 5 (estimasi BPS):
+    </div>
+    <table class="top-table">
+      <thead><tr><th>#</th><th>WILAYAH</th><th>EST.</th></tr></thead>
+      <tbody id="top-body"></tbody>
+    </table>
 
     <hr class="div"/>
-    <div class="sec">// TOP 5 WILAYAH</div>
+    <div class="sec">// DATA NYATA — BERITA SCRAPED
+      <span style="color:#00ff41;font-size:0.5rem;margin-left:4px;">&#9679; LIVE</span>
+    </div>
+    <div style="font-size:0.58rem;color:rgba(0,255,65,0.5);padding:0 4px 6px;line-height:1.5;">
+      Dihitung dari artikel berita ter-geocode<br/>
+      (CNN, Tempo, Jawa Pos, Antara, dll.)
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card" style="grid-column:span 2">
+        <div class="stat-lbl">TOTAL ARTIKEL TERDETEKSI</div>
+        <div class="stat-val" id="n-total" style="font-size:1.1rem">—</div>
+      </div>
+    </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">
+      Top 5 provinsi (dari berita):
+    </div>
     <table class="top-table">
-      <thead><tr><th>#</th><th>WILAYAH</th><th>KASUS</th></tr></thead>
-      <tbody id="top-body"></tbody>
+      <thead><tr><th>#</th><th>WILAYAH</th><th>BERITA</th></tr></thead>
+      <tbody id="news-top-body"></tbody>
     </table>
 
     <hr class="div"/>
@@ -703,9 +755,10 @@ HTML = f"""<!DOCTYPE html>
 const MAPS            = {maps_json};
 const CRIME_TYPE_MAPS = {crime_type_maps_json};
 const CRIME_TYPE_STATS = {crime_type_stats_json};
-const STATS    = {stats_json};
-const LAYERS   = {layers_json};
-const SENTIMEN = {sentimen_json};
+const STATS      = {stats_json};
+const NEWS_STATS = {news_stats_json};
+const LAYERS     = {layers_json};
+const SENTIMEN   = {sentimen_json};
 let blobUrl    = null;
 let currentLayer = 'kriminalitas';
 
@@ -730,7 +783,7 @@ function loadMap(html) {{
   document.getElementById('map-frame').src = blobUrl;
 }}
 
-function updateStats(s, neon) {{
+function updateStats(s, neon, key) {{
   if (neon) document.documentElement.style.setProperty('--neon', neon);
   document.getElementById('s-total').textContent = (s.total||0).toLocaleString('id-ID');
   document.getElementById('s-avg').textContent   = (s.avg||0).toLocaleString('id-ID');
@@ -740,6 +793,16 @@ function updateStats(s, neon) {{
     `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
      <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
   ).join('');
+
+  // Panel data nyata dari berita
+  if (key && NEWS_STATS[key]) {{
+    const ns = NEWS_STATS[key];
+    document.getElementById('n-total').textContent = (ns.total||0).toLocaleString('id-ID');
+    document.getElementById('news-top-body').innerHTML = (ns.top||[]).map(([w,k],i)=>
+      `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
+       <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
+    ).join('') || '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
+  }}
 }}
 
 function switchCrimeType(jenis, btn) {{
@@ -754,12 +817,12 @@ function switchCrimeType(jenis, btn) {{
   btn.style.color = neon;
 
   if (!jenis) {{
-    updateStats(STATS['kriminalitas'], LAYERS['kriminalitas'].neon);
+    updateStats(STATS['kriminalitas'], LAYERS['kriminalitas'].neon, 'kriminalitas');
     loadMap(MAPS['kriminalitas']);
     document.documentElement.style.setProperty('--neon', LAYERS['kriminalitas'].neon);
   }} else {{
     const s = CRIME_TYPE_STATS[jenis] || {{}};
-    updateStats(s, s.neon || neon);
+    updateStats(s, s.neon || neon, null);
     loadMap(CRIME_TYPE_MAPS[jenis]);
   }}
 }}
@@ -777,7 +840,7 @@ function switchLayer(key, btn) {{
   if (crimePanel) crimePanel.style.display = key === 'kriminalitas' ? 'block' : 'none';
 
   const s = STATS[key];
-  updateStats(s, neon);
+  updateStats(s, neon, key);
   updateSentimen(key);
 
   const mc = document.getElementById('marker-count');
