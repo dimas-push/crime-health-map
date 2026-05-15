@@ -957,18 +957,25 @@ function buildMapWithFilter(key, days) {{
 (function() {{
   var _neon = "${{neon}}";
   var _articles = ${{JSON.stringify(filtered)}};
+  function esc(s) {{
+    return String(s||'')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }}
   function addMarkers(lmap) {{
     var layer = L.layerGroup().addTo(lmap);
     _articles.forEach(function(a) {{
       var c = L.circleMarker([a.lat, a.lon], {{
         radius:7, color:_neon, fillColor:_neon, fillOpacity:0.85, weight:2
       }});
-      var judul = String(a.judul||'').slice(0,120);
-      var desk  = String(a.deskripsi||'').slice(0,200);
-      var tgl   = String(a.tanggal||'').slice(0,16);
-      var src   = String(a.sumber||'');
-      var kab   = String(a.kabupaten||'');
-      var url   = String(a.url||'#');
+      var judul = esc(String(a.judul||'').slice(0,120));
+      var desk  = esc(String(a.deskripsi||'').slice(0,200));
+      var tgl   = esc(String(a.tanggal||'').slice(0,16));
+      var src   = esc(String(a.sumber||''));
+      var kab   = esc(String(a.kabupaten||''));
+      var url   = esc(String(a.url||'#'));
+      var meta  = tgl + (src?' | '+src:'') + (kab?' | '+kab:'');
       var popup =
         '<div style="background:#0a0a1f;color:'+_neon+';font-family:monospace;' +
         'font-size:12px;border:1px solid '+_neon+';padding:10px;max-width:280px;' +
@@ -976,13 +983,13 @@ function buildMapWithFilter(key, days) {{
         '<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;' +
         'border-bottom:1px solid '+_neon+'44;padding-bottom:4px;">'+judul+'</div>' +
         '<div style="color:'+_neon+'99;font-size:11px;margin-bottom:6px;">'+desk+'</div>' +
-        '<div style="font-size:10px;color:'+_neon+'66;margin-bottom:8px;">'+
-        tgl+(src?' | '+src:'')+(kab?' | '+kab:'')+'</div>' +
+        '<div style="font-size:10px;color:'+_neon+'66;margin-bottom:8px;">'+meta+'</div>' +
         '<a href="'+url+'" target="_blank" style="color:'+_neon+';text-decoration:none;' +
         'font-size:11px;border:1px solid '+_neon+';padding:2px 8px;">' +
-        'BACA SELENGKAPNYA &rarr;</a></div>';
+        'BACA SELENGKAPNYA &#8594;</a></div>';
+      var tipTeks = esc(String(a.judul||'').slice(0,60));
       c.bindPopup(popup, {{maxWidth:300}});
-      c.bindTooltip(judul.slice(0,60)+(judul.length>60?'...':''));
+      c.bindTooltip(tipTeks + (String(a.judul||'').length>60?'...':''));
       layer.addLayer(c);
     }});
   }}
