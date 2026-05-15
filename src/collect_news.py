@@ -28,27 +28,32 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 # RSS feed publik
 # ---------------------------------------------------------------------------
+# ── Google News RSS per keyword (agregat dari 100+ sumber Indonesia) ──
+_GN = "https://news.google.com/rss/search?hl=id&gl=ID&ceid=ID:id&q="
+
 RSS_FEEDS = {
-    # CNN Indonesia
-    "cnnindonesia_nasional":   "https://www.cnnindonesia.com/nasional/rss",
-    "cnnindonesia_gaya":       "https://www.cnnindonesia.com/gaya-hidup/rss",
-    # Tempo
-    "tempo_nasional":          "https://rss.tempo.co/nasional",
-    "tempo_hukum":             "https://rss.tempo.co/hukum",
-    "tempo_metro":             "https://rss.tempo.co/metro",
-    # Jawa Pos
-    "jawapos_nasional":        "https://www.jawapos.com/rss/nasional",
-    "jawapos_metro":           "https://www.jawapos.com/rss/metro",
-    # Antara News
-    "antaranews_hukum":        "https://www.antaranews.com/rss/hukum",
-    "antaranews_humaniora":    "https://www.antaranews.com/rss/humaniora",
-    "antaranews_nusantara":    "https://www.antaranews.com/rss/nusantara",
-    # Republika
-    "republika_nasional":      "https://www.republika.co.id/rss/nasional",
-    # Media Indonesia
-    "media_indonesia":         "https://mediaindonesia.com/rss",
-    # CNBC Indonesia (isu korupsi, kebijakan)
-    "cnbcindonesia_news":      "https://www.cnbcindonesia.com/rss",
+    # Google News per topik — 100 artikel terbaru, multi-sumber
+    "gnews_kriminal":    _GN + "kriminal+Indonesia+ditangkap",
+    "gnews_narkoba":     _GN + "narkoba+ditangkap+tersangka",
+    "gnews_pencurian":   _GN + "pencurian+begal+Indonesia",
+    "gnews_pembunuhan":  _GN + "pembunuhan+tersangka+polisi",
+    "gnews_korupsi":     _GN + "korupsi+KPK+ditangkap",
+    "gnews_kekerasan":   _GN + "kekerasan+seksual+pelecehan",
+    "gnews_penyakit":    _GN + "wabah+penyakit+menular+Indonesia",
+    "gnews_dbd":         _GN + "demam+berdarah+DBD+kasus",
+    "gnews_hiv":         _GN + "HIV+AIDS+kasus+Indonesia",
+    "gnews_tbc":         _GN + "TBC+tuberculosis+kasus",
+    # Sumber langsung yang masih aktif
+    "cnnindonesia_nasional": "https://www.cnnindonesia.com/nasional/rss",
+    "tempo_nasional":        "https://rss.tempo.co/nasional",
+    "tempo_hukum":           "https://rss.tempo.co/hukum",
+    "tempo_metro":           "https://rss.tempo.co/metro",
+    "jawapos_nasional":      "https://www.jawapos.com/rss/nasional",
+    "jawapos_metro":         "https://www.jawapos.com/rss/metro",
+    "antaranews_hukum":      "https://www.antaranews.com/rss/hukum",
+    "antaranews_humaniora":  "https://www.antaranews.com/rss/humaniora",
+    "republika_nasional":    "https://www.republika.co.id/rss/nasional",
+    "media_indonesia":       "https://mediaindonesia.com/rss",
 }
 
 # ---------------------------------------------------------------------------
@@ -208,21 +213,29 @@ def scrape_feeds() -> pd.DataFrame:
     df["provinsi"]    = df["teks_gabung"].apply(_detect_provinsi)
     df["kabupaten"]   = df["teks_gabung"].apply(_detect_kabupaten)
 
-    # Tambahkan koordinat lat/lon dari nama kabupaten
-    def _to_lat(kab):
-        if not kab or pd.isna(kab):
-            return None
-        c = get_coords(str(kab).lower())
-        return c[0] if c else None
+    # Fallback: kalau kabupaten kosong tapi provinsi ada, pakai ibukota provinsi
+    def _resolve_location(row) -> tuple[Optional[str], Optional[float], Optional[float]]:
+        kab  = row["kabupaten"]
+        prov = row["provinsi"]
 
-    def _to_lon(kab):
-        if not kab or pd.isna(kab):
-            return None
-        c = get_coords(str(kab).lower())
-        return c[1] if c else None
+        # Coba dari kabupaten dulu
+        if kab and not pd.isna(kab):
+            c = get_coords(str(kab).lower())
+            if c:
+                return str(kab), c[0], c[1]
 
-    df["lat"] = df["kabupaten"].apply(_to_lat)
-    df["lon"] = df["kabupaten"].apply(_to_lon)
+        # Fallback ke nama provinsi (alias → ibukota)
+        if prov and not pd.isna(prov):
+            c = get_coords(str(prov).lower())
+            if c:
+                return str(prov), c[0], c[1]
+
+        return kab, None, None
+
+    resolved       = df.apply(_resolve_location, axis=1, result_type="expand")
+    df["kabupaten"] = resolved[0]
+    df["lat"]       = resolved[1]
+    df["lon"]       = resolved[2]
 
     # Buang artikel yang tidak relevan
     df = df[df["kategori"].notna()].copy()
