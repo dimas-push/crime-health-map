@@ -589,9 +589,23 @@ _ALIASES: dict[str, str] = {
 
 # Kata kerja/kata umum bahasa Indonesia yang sering false-positive
 _BLACKLIST: set[str] = {
-    "buru", "muna", "luwu", "poso", "tebo", "Ende", "pati",
+    "buru", "muna", "luwu", "poso", "tebo", "ende", "pati",
     "blora", "rote", "alor", "biak", "bima", "palu", "tual",
     "demak", "gowa", "bone", "wajo", "bulukumba",
+    # Nama institusi/frasa yang mengandung nama kota tapi bukan lokasi
+    "metro jaya",   # Polda Metro Jaya → bukan Kota Metro Lampung
+    "polda metro",
+}
+
+# Frasa yang harus diblokir bila muncul sebagai konteks nama kota
+# Format: {nama_kota: [frasa_konteks_yang_invalid]}
+_CONTEXT_BLACKLIST: dict[str, list[str]] = {
+    "metro":    ["polda metro", "metro jaya", "kpk metro", "metro tv"],
+    "palu":     ["berdampak palu", "palu hakim", "palu sidang"],
+    "blitar":   ["kota blitar"],
+    # "Berita Terkini Medan Sumut" = nama situs, bukan lokasi berita
+    "medan":    ["berita terkini medan", "sumut terkini", "medan sumut"],
+    "kota medan": ["berita terkini medan", "sumut terkini"],
 }
 
 

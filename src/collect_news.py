@@ -20,7 +20,7 @@ import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, str(Path(__file__).parent))
-from geocode import get_coords, _COORDS, _ALIASES, _BLACKLIST
+from geocode import get_coords, _COORDS, _ALIASES, _BLACKLIST, _CONTEXT_BLACKLIST
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -169,6 +169,10 @@ def _detect_kabupaten(teks: str) -> Optional[str]:
         if nama in _BLACKLIST or nama.lower() in _BLACKLIST:
             continue
         if re.search(r'\b' + re.escape(nama) + r'\b', teks_lower):
+            # Cek context blacklist — hindari false positive frasa institusi
+            ctx_blocked = _CONTEXT_BLACKLIST.get(nama.lower(), [])
+            if any(frasa in teks_lower for frasa in ctx_blocked):
+                continue
             # Resolve alias ke nama kamus
             resolved = _ALIASES.get(nama, nama)
             return resolved.title()
@@ -213,10 +217,24 @@ def scrape_feeds() -> pd.DataFrame:
     df["provinsi"]    = df["teks_gabung"].apply(_detect_provinsi)
     df["kabupaten"]   = df["teks_gabung"].apply(_detect_kabupaten)
 
-    # Fallback: kalau kabupaten kosong tapi provinsi ada, pakai ibukota provinsi
+    # Kata kunci yang menandakan berita bukan kejadian di Indonesia
+    _LUAR_NEGERI = [
+        "di jepang", "di china", "di malaysia", "di singapura", "di australia",
+        "di korea", "di arab saudi", "di amerika", "di eropa", "di inggris",
+        "di prancis", "di filipina", "di thailand", "di vietnam", "di myanmar",
+        "wni di luar", "ditangkap di luar negeri", "kapal mv ", "hantavirus",
+    ]
+
     def _resolve_location(row) -> tuple[Optional[str], Optional[float], Optional[float]]:
-        kab  = row["kabupaten"]
-        prov = row["provinsi"]
+        kab   = row["kabupaten"]
+        prov  = row["provinsi"]
+        judul = str(row.get("judul") or "").lower()
+        desk  = str(row.get("deskripsi") or "").lower()
+        teks  = judul + " " + desk
+
+        # Buang berita yang kejadiannya di luar negeri
+        if any(frasa in teks for frasa in _LUAR_NEGERI):
+            return None, None, None
 
         # Coba dari kabupaten dulu
         if kab and not pd.isna(kab):
@@ -224,11 +242,14 @@ def scrape_feeds() -> pd.DataFrame:
             if c:
                 return str(kab), c[0], c[1]
 
-        # Fallback ke nama provinsi (alias → ibukota)
+        # Fallback ke ibukota provinsi — hanya jika nama provinsi ada di _ALIASES
+        # (artinya ada mapping eksplisit provinsi → ibukota, bukan tebakan)
         if prov and not pd.isna(prov):
-            c = get_coords(str(prov).lower())
-            if c:
-                return str(prov), c[0], c[1]
+            prov_lower = str(prov).lower()
+            if prov_lower in _ALIASES:
+                c = get_coords(prov_lower)
+                if c:
+                    return str(prov), c[0], c[1]
 
         return kab, None, None
 
