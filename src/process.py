@@ -12,10 +12,13 @@ Pipeline:
 
 import re
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+
+_CURRENT_YEAR = str(datetime.now().year)
 
 RAW_DIR       = Path(__file__).parent.parent / "data" / "raw"
 PROCESSED_DIR = Path(__file__).parent.parent / "data" / "processed"
@@ -56,6 +59,20 @@ PROV_NORMALIZE = {
     "jabar":                     "Jawa Barat",
     "jateng":                    "Jawa Tengah",
     "jatim":                     "Jawa Timur",
+    # Alias yang sebelumnya hilang
+    "aceh":                      "Aceh",
+    "nad":                       "Aceh",
+    "nanggroe aceh darussalam":  "Aceh",
+    "riau":                      "Riau",
+    "jambi":                     "Jambi",
+    "bengkulu":                  "Bengkulu",
+    "lampung":                   "Lampung",
+    "banten":                    "Banten",
+    "bali":                      "Bali",
+    "gorontalo":                 "Gorontalo",
+    "maluku":                    "Maluku",
+    "papua":                     "Papua",
+    "papua barat daya":          "Papua Barat",
 }
 
 # Nama resmi 34 provinsi
@@ -151,19 +168,33 @@ def load_news() -> pd.DataFrame:
     )
     agg["sumber_tipe"] = "news"
     agg["sumber"]      = "RSS"
-    agg["tahun"]       = "2024"
+    agg["tahun"]       = _CURRENT_YEAR
     return agg
 
 
 def load_tweets() -> pd.DataFrame:
-    """Load data tweet dan hitung frekuensi per provinsi per kategori."""
-    path = RAW_DIR / "tweets.csv"
+    """Load data sosial media dari social.csv dan hitung frekuensi per provinsi per kategori."""
+    path = RAW_DIR / "social.csv"
     if not path.exists():
-        print("[process] tweets.csv tidak ditemukan, skip.")
+        print("[process] social.csv tidak ditemukan, skip.")
         return pd.DataFrame()
 
     df = pd.read_csv(path)
-    df["provinsi"] = df["lokasi_geo"].apply(normalize_provinsi)
+    if "kategori" not in df.columns or "teks" not in df.columns:
+        print("[process] social.csv tidak memiliki kolom yang diharapkan, skip.")
+        return pd.DataFrame()
+
+    # social.csv tidak punya kolom provinsi — deteksi dari teks menggunakan nama provinsi resmi
+    def _extract_provinsi(teks: str) -> str | None:
+        if not teks or pd.isna(teks):
+            return None
+        teks_lower = str(teks).lower()
+        for p in PROVINSI_RESMI:
+            if p.lower() in teks_lower:
+                return p
+        return None
+
+    df["provinsi"] = df["teks"].apply(_extract_provinsi)
     df = df[df["provinsi"].notna() & df["kategori"].notna()]
     df["teks"] = df["teks"].apply(clean_text)
 
@@ -174,8 +205,8 @@ def load_tweets() -> pd.DataFrame:
         .rename(columns={"provinsi": "nama_provinsi"})
     )
     agg["sumber_tipe"] = "social"
-    agg["sumber"]      = "Twitter"
-    agg["tahun"]       = "2024"
+    agg["sumber"]      = "SosialMedia"
+    agg["tahun"]       = _CURRENT_YEAR
     return agg
 
 
@@ -237,6 +268,9 @@ def load_crime_detail() -> pd.DataFrame:
     df = pd.read_csv(path)
     df["nama_provinsi"] = df["nama_provinsi"].apply(normalize_provinsi)
     df = df[df["nama_provinsi"].notna()]
+    # Normalize column name: lama='jumlah', baru='jumlah_kasus'
+    if "jumlah" in df.columns and "jumlah_kasus" not in df.columns:
+        df = df.rename(columns={"jumlah": "jumlah_kasus"})
     return df
 
 

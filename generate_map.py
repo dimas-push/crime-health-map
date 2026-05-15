@@ -99,9 +99,6 @@ def load_sentiment_summary() -> dict:
             return {}
 
 
-DOCS_DIR = Path(__file__).parent / "docs"
-DOCS_DIR.mkdir(exist_ok=True)
-
 # ---------------------------------------------------------------------------
 # Konfigurasi layer: warna neon per kategori (gelap → neon)
 # ---------------------------------------------------------------------------
@@ -715,10 +712,10 @@ HTML = f"""<!DOCTYPE html>
       Filter rentang waktu:
     </div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;padding:0 2px 6px;">
-      <button class="tf-btn active" data-days="7"   onclick="setTimeFilter(7,this)">7H</button>
+      <button class="tf-btn"        data-days="7"   onclick="setTimeFilter(7,this)">7H</button>
       <button class="tf-btn"        data-days="30"  onclick="setTimeFilter(30,this)">30H</button>
       <button class="tf-btn"        data-days="90"  onclick="setTimeFilter(90,this)">90H</button>
-      <button class="tf-btn"        data-days="0"   onclick="setTimeFilter(0,this)">SEMUA</button>
+      <button class="tf-btn active" data-days="0"   onclick="setTimeFilter(0,this)">SEMUA</button>
     </div>
     <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 6px;">
       Klik titik di peta untuk detail berita
@@ -735,8 +732,9 @@ HTML = f"""<!DOCTYPE html>
     <hr class="div"/>
     <div class="sec" style="color:rgba(255,255,255,0.1)">// SUMBER: BPS · KEMENKES · SIMFONI-PPA</div>
     <div style="font-size:0.58rem;color:rgba(255,255,255,0.15);line-height:1.7;padding:2px 4px">
-      Berita: CNN Indonesia · Antara<br/>
-      Sosmed: Twitter/X (sampel)
+      Berita: Google News · CNN · Tempo<br/>
+      Antara · Republika · Jawa Pos<br/>
+      Sosmed: Telegram · YouTube
     </div>
   </aside>
 
@@ -934,10 +932,6 @@ function parseArticleDate(tanggal) {{
   try {{ return new Date(tanggal); }} catch(e) {{ return null; }}
 }}
 
-function _escapeHtml(s) {{
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}}
-
 function buildMapWithFilter(key, days) {{
   const neon   = LAYERS[key] ? LAYERS[key].neon : NEON_MAP[key] || '#00ffff';
   const cutoff = days > 0 ? new Date(Date.now() - days * 86400000) : null;
@@ -1003,11 +997,13 @@ function buildMapWithFilter(key, days) {{
     }}
     return null;
   }}
-  var lmap = findLeafletMap();
-  if (lmap) {{ addMarkers(lmap); }}
-  else {{ document.addEventListener('DOMContentLoaded', function() {{
-    lmap = findLeafletMap(); if (lmap) addMarkers(lmap);
-  }}); }}
+  var _tries = 0;
+  function tryAddMarkers() {{
+    var lmap = findLeafletMap();
+    if (lmap) {{ addMarkers(lmap); return; }}
+    if (++_tries < 20) {{ setTimeout(tryAddMarkers, 300); }}
+  }}
+  tryAddMarkers();
 }})();
 ` + _close;
 

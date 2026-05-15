@@ -312,7 +312,7 @@ def collect_crime_detail() -> pd.DataFrame:
             rows.append({
                 "nama_provinsi": prov,
                 "jenis_kejahatan": jenis,
-                "jumlah": jumlah,
+                "jumlah_kasus": jumlah,
                 "tahun": "2023",
                 "sumber": "BPS Statistik Kriminal 2023",
             })

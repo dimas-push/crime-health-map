@@ -58,27 +58,27 @@ def main() -> None:
                 shutil.rmtree(path)
                 print(f"  Dihapus: {path}")
 
-    # ── TAHAP 1: Kumpulkan data ──────────────────────────────────────────────
+    # ── TAHAP 1-3: Kumpulkan data ───────────────────────────────────────────
     if not args.skip_collect:
-        _banner("TAHAP 1/4 — Pengumpulan Data Resmi")
+        _banner("TAHAP 1/5 — Pengumpulan Data Resmi")
         t = time.time()
         collect_official()
         print(f"  Selesai dalam {_elapsed(t)}")
 
-        _banner("TAHAP 2/4 — Scraping Berita")
+        _banner("TAHAP 2/5 — Scraping Berita")
         t = time.time()
         collect_news()
         print(f"  Selesai dalam {_elapsed(t)}")
 
-        _banner("TAHAP 3/4 — Data Sosial Media")
+        _banner("TAHAP 3/5 — Data Sosial Media")
         t = time.time()
         collect_social()
         print(f"  Selesai dalam {_elapsed(t)}")
     else:
         print("\n[run_all] --skip-collect: lewati tahap pengumpulan data.")
 
-    # ── TAHAP 2: Proses & simpan ke SQLite ──────────────────────────────────
-    _banner("TAHAP 3/4 — Pemrosesan & Database")
+    # ── TAHAP 4: Proses & simpan ke SQLite ──────────────────────────────────
+    _banner("TAHAP 4/5 — Pemrosesan & Database")
     t = time.time()
     # Hapus cache final.csv agar proses rebuild dengan data terbaru
     final_csv = PROCESSED_DIR / "final.csv"
@@ -87,8 +87,8 @@ def main() -> None:
     process_all()
     print(f"  Selesai dalam {_elapsed(t)}")
 
-    # ── TAHAP 3: Analisis sentimen ──────────────────────────────────────────
-    _banner("TAHAP 4/4 — Analisis Sentimen")
+    # ── TAHAP 5: Analisis sentimen ──────────────────────────────────────────
+    _banner("TAHAP 5/5 — Analisis Sentimen")
     t = time.time()
     run_sentiment_analysis(use_model=args.use_model)
     print(f"  Selesai dalam {_elapsed(t)}")

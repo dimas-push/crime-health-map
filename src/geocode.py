@@ -146,7 +146,7 @@ _COORDS: dict[str, tuple[float, float]] = {
     "kendal": (-6.9167, 110.2000), "batang": (-6.9167, 109.7333),
     "pekalongan": (-6.9833, 109.6833), "pemalang": (-6.8833, 109.3833),
     "tegal": (-6.8783, 109.1249), "brebes": (-6.8717, 109.0381),
-    "temanggung": (-7.3167, 110.1833), "banjarnegara": (-7.3833, 109.7000),
+    "temanggung": (-7.3167, 110.1833),
     # ── DI YOGYAKARTA ──
     "kota yogyakarta": (-7.7956, 110.3695), "sleman": (-7.7167, 110.3667),
     "bantul": (-7.8833, 110.3333), "kulon progo": (-7.8333, 110.1667),
@@ -233,6 +233,7 @@ _COORDS: dict[str, tuple[float, float]] = {
     "paser": (-1.8333, 115.8333), "mahakam ulu": (0.3333, 115.5000),
     # ── KALIMANTAN UTARA ──
     "kota tarakan": (3.3167, 117.5833), "bulungan": (2.6833, 117.3667),
+    "kota tanjung selor": (2.8370, 117.3640),
     "malinau": (3.5833, 116.6167), "nunukan": (4.1333, 117.6667),
     "tana tidung": (3.5333, 117.2500),
     # ── SULAWESI UTARA ──
@@ -333,7 +334,7 @@ _ALIASES: dict[str, str] = {
     "jaksel":  "jakarta selatan",
     "jakut":   "jakarta utara",
     "jakpus":  "jakarta pusat",
-    "jakarta": "kota jakarta pusat",
+    "jakarta": "jakarta pusat",
     # Kota besar tanpa "kota"
     "bandung":   "kota bandung",
     "surabaya":  "kota surabaya",
@@ -582,7 +583,19 @@ _ALIASES: dict[str, str] = {
     "maluku":         "kota ambon",
     "sulawesi utara": "kota manado",
     "sulawesi tengah":"kota palu",
-    "gorontalo prov": "kota gorontalo",
+    "gorontalo":      "kota gorontalo",
+    "sulawesi barat": "kota mamuju",
+    "maluku":         "kota ambon",
+    "nusa tenggara barat": "kota mataram",
+    "nusa tenggara timur": "kota kupang",
+    "kalimantan barat": "kota pontianak",
+    "kalimantan tengah": "kota palangka raya",
+    "kalimantan utara": "kota tanjung selor",
+    "sulawesi tenggara": "kota kendari",
+    "di yogyakarta":  "kota yogyakarta",
+    "dki jakarta":    "jakarta pusat",
+    "kepulauan bangka belitung": "kota pangkalpinang",
+    "sumatera barat": "kota padang",
     "bengkulu prov":  "kota bengkulu",
     "jambi prov":     "kota jambi",
 }

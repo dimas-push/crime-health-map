@@ -159,18 +159,20 @@ def run_sentiment_analysis(use_model: bool = True) -> pd.DataFrame:
     """
     frames = []
 
-    # --- Tweet ---
-    tweet_path = RAW_DIR / "tweets.csv"
-    if tweet_path.exists():
-        df_tweet = pd.read_csv(tweet_path)
-        if "teks" in df_tweet.columns and len(df_tweet) > 0:
-            print(f"[sentiment] Analisis {len(df_tweet)} tweet ...")
-            results = analyze_batch(df_tweet["teks"].tolist(), use_model=use_model)
-            df_tweet["sentimen"]       = [r["label"] for r in results]
-            df_tweet["sentimen_score"] = [r["score"] for r in results]
-            df_tweet["teks_sumber"]    = "tweet"
-            frames.append(df_tweet[["tweet_id", "teks", "kategori", "lokasi_geo",
-                                     "sentimen", "sentimen_score", "teks_sumber"]])
+    # --- Sosial Media (social.csv) ---
+    social_path = RAW_DIR / "social.csv"
+    if social_path.exists():
+        df_social = pd.read_csv(social_path)
+        if "teks" in df_social.columns and len(df_social) > 0:
+            print(f"[sentiment] Analisis {len(df_social)} konten sosial media ...")
+            results = analyze_batch(df_social["teks"].tolist(), use_model=use_model)
+            df_social["sentimen"]       = [r["label"] for r in results]
+            df_social["sentimen_score"] = [r["score"] for r in results]
+            df_social["teks_sumber"]    = "sosial"
+            df_social["tweet_id"]       = [f"social_{i}" for i in df_social.index]
+            df_social["lokasi_geo"]     = df_social.get("sumber", pd.Series(dtype=str))
+            frames.append(df_social[["tweet_id", "teks", "kategori", "lokasi_geo",
+                                      "sentimen", "sentimen_score", "teks_sumber"]])
 
     # --- Berita ---
     news_path = RAW_DIR / "news.csv"

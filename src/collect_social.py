@@ -12,7 +12,6 @@ Simpan ke data/raw/social.csv
 import os
 import re
 import time
-import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -21,8 +20,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-
-warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)  # type: ignore
 
 load_dotenv()
 
@@ -68,7 +65,7 @@ def scrape_telegram_channel(channel: str) -> list[dict]:
     """Scrape pesan terbaru dari channel Telegram publik via web preview."""
     url = f"https://t.me/s/{channel}"
     try:
-        r = requests.get(url, headers=HEADERS, timeout=12, verify=False)
+        r = requests.get(url, headers=HEADERS, timeout=12)
         r.raise_for_status()
     except requests.RequestException as e:
         print(f"[social] Telegram @{channel} gagal: {e}")
