@@ -25,10 +25,13 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 # RSS feed publik
 # ---------------------------------------------------------------------------
 RSS_FEEDS = {
-    "cnnindonesia_nasional": "https://www.cnnindonesia.com/nasional/rss",
-    "cnnindonesia_gaya":     "https://www.cnnindonesia.com/gaya-hidup/rss",
-    "antaranews_hukum":      "https://www.antaranews.com/rss/hukum",
-    "antaranews_kesehatan":  "https://www.antaranews.com/rss/kesehatan",
+    "cnnindonesia_nasional":  "https://www.cnnindonesia.com/nasional/rss",
+    "cnnindonesia_gaya":      "https://www.cnnindonesia.com/gaya-hidup/rss",
+    "cnnindonesia_regional":  "https://www.cnnindonesia.com/regional/rss",
+    "antaranews_hukum":       "https://www.antaranews.com/rss/hukum",
+    "antaranews_nusantara":   "https://www.antaranews.com/rss/nusantara",
+    "republika_nasional":     "https://www.republika.co.id/rss/nasional",
+    "republika_peristiwa":    "https://www.republika.co.id/rss/nasional/peristiwa",
 }
 
 # ---------------------------------------------------------------------------
@@ -43,7 +46,10 @@ KEYWORDS = {
     "kekerasan_seksual": [
         "kekerasan seksual", "pelecehan seksual", "pemerkosaan", "perkosaan",
         "rudapaksa", "cabul", "kemenpppa", "simfoni", "kdrt", "kekerasan perempuan",
-        "kekerasan anak",
+        "kekerasan anak", "trafficking", "perdagangan orang", "eksploitasi anak",
+        "pelecehan", "pencabulan", "pelecehan terhadap", "korban kekerasan",
+        "perlindungan anak", "komnas perempuan", "lpsk", "pkdrt",
+        "kekerasan dalam rumah tangga", "perundungan seksual",
     ],
     "penyakit_menular": [
         "penyakit menular", "wabah", "epidemi", "pandemi", "DBD", "demam berdarah",
