@@ -9,6 +9,7 @@ Strategi:
 """
 
 import re
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,9 @@ from typing import Optional
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+
+sys.path.insert(0, str(Path(__file__).parent))
+from geocode import get_coords, _COORDS
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -123,6 +127,20 @@ def _detect_kategori(teks: str) -> Optional[str]:
     return None
 
 
+# Daftar kabupaten/kota dari kamus geocode (diurutkan panjang → pendek
+# agar nama lebih spesifik dicocokkan lebih dulu)
+_KABUPATEN_LIST = sorted(_COORDS.keys(), key=len, reverse=True)
+
+
+def _detect_kabupaten(teks: str) -> Optional[str]:
+    """Deteksi nama kabupaten/kota dari teks, kembalikan nama + koordinat."""
+    teks_lower = teks.lower()
+    for kab in _KABUPATEN_LIST:
+        if re.search(r'\b' + re.escape(kab) + r'\b', teks_lower):
+            return kab.title()
+    return None
+
+
 def _detect_provinsi(teks: str) -> Optional[str]:
     """Cari nama provinsi pertama yang muncul dalam teks."""
     for prov in PROVINSI_LIST:
@@ -159,13 +177,32 @@ def scrape_feeds() -> pd.DataFrame:
     df["teks_gabung"] = df["judul"] + " " + df["deskripsi"]
     df["kategori"]    = df["teks_gabung"].apply(_detect_kategori)
     df["provinsi"]    = df["teks_gabung"].apply(_detect_provinsi)
+    df["kabupaten"]   = df["teks_gabung"].apply(_detect_kabupaten)
 
-    # Buang artikel yang tidak relevan (tidak ada kategori terdeteksi)
+    # Tambahkan koordinat lat/lon dari nama kabupaten
+    def _to_lat(kab):
+        if not kab or pd.isna(kab):
+            return None
+        c = get_coords(str(kab).lower())
+        return c[0] if c else None
+
+    def _to_lon(kab):
+        if not kab or pd.isna(kab):
+            return None
+        c = get_coords(str(kab).lower())
+        return c[1] if c else None
+
+    df["lat"] = df["kabupaten"].apply(_to_lat)
+    df["lon"] = df["kabupaten"].apply(_to_lon)
+
+    # Buang artikel yang tidak relevan
     df = df[df["kategori"].notna()].copy()
     df = df.drop(columns=["teks_gabung"])
     df["scraped_at"] = datetime.now().isoformat()
 
     print(f"[collect_news] {len(df)} artikel relevan dari {len(all_items)} total.")
+    geo_count = df["lat"].notna().sum()
+    print(f"[collect_news] {geo_count}/{len(df)} artikel berhasil di-geocode.")
     return df
 
 

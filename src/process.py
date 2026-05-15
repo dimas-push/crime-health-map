@@ -229,8 +229,31 @@ def build_final_table(
     return base
 
 
+def load_articles_full() -> pd.DataFrame:
+    """
+    Load artikel lengkap dari news.csv (dengan lat/lon) untuk tabel marker.
+    Kembalikan baris yang punya koordinat agar bisa ditampilkan di peta.
+    """
+    path = RAW_DIR / "news.csv"
+    if not path.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(path)
+    df["provinsi"]  = df["provinsi"].apply(normalize_provinsi)
+    df["judul"]     = df["judul"].apply(clean_text)
+    df["deskripsi"] = df["deskripsi"].apply(clean_text) if "deskripsi" in df.columns else ""
+
+    # Hanya artikel dengan koordinat valid
+    df = df[df["lat"].notna() & df["lon"].notna()].copy()
+    return df[[
+        "judul", "deskripsi", "url", "tanggal", "sumber",
+        "kategori", "provinsi", "kabupaten", "lat", "lon", "scraped_at",
+    ]]
+
+
 def save_to_sqlite(df_official: pd.DataFrame, df_news: pd.DataFrame,
-                   df_tweets: pd.DataFrame, df_final: pd.DataFrame) -> None:
+                   df_tweets: pd.DataFrame, df_final: pd.DataFrame,
+                   df_articles: pd.DataFrame) -> None:
     """Simpan semua tabel ke SQLite."""
     with sqlite3.connect(DB_PATH) as conn:
         if not df_official.empty:
@@ -240,6 +263,9 @@ def save_to_sqlite(df_official: pd.DataFrame, df_news: pd.DataFrame,
         if not df_tweets.empty:
             df_tweets.to_sql("data_tweet", conn, if_exists="replace", index=False)
         df_final.to_sql("data_final", conn, if_exists="replace", index=False)
+        if not df_articles.empty:
+            df_articles.to_sql("artikel", conn, if_exists="replace", index=False)
+            print(f"[process] {len(df_articles)} artikel dengan koordinat disimpan ke tabel 'artikel'.")
     print(f"[process] Database disimpan: {DB_PATH}")
 
 
@@ -261,10 +287,14 @@ def process_all() -> pd.DataFrame:
     tweets = load_tweets()
     print(f"  {len(tweets)} baris agregasi tweet.")
 
+    print("\n[process] Load artikel lengkap (dengan koordinat) ...")
+    articles = load_articles_full()
+    print(f"  {len(articles)} artikel dengan koordinat.")
+
     print("\n[process] Membangun tabel final ...")
     final = build_final_table(official, news, tweets)
 
-    save_to_sqlite(official, news, tweets, final)
+    save_to_sqlite(official, news, tweets, final, articles)
 
     final.to_csv(CSV_PATH, index=False)
     print(f"[process] CSV final disimpan: {CSV_PATH}")

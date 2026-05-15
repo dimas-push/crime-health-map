@@ -47,6 +47,22 @@ def load_or_build_data() -> pd.DataFrame:
     return df
 
 
+def load_articles() -> pd.DataFrame:
+    """Ambil artikel dengan koordinat dari SQLite untuk marker layer."""
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql(
+                "SELECT judul, deskripsi, url, tanggal, sumber, kategori, "
+                "provinsi, kabupaten, lat, lon FROM artikel "
+                "WHERE lat IS NOT NULL AND lon IS NOT NULL",
+                conn,
+            )
+        except Exception:
+            return pd.DataFrame()
+
+
 def load_sentiment_summary() -> dict:
     """Ambil ringkasan sentimen dari SQLite untuk ditampilkan di UI."""
     if not DB_PATH.exists():
@@ -121,11 +137,18 @@ for kat in ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]:
     data[kat] = data["id_wilayah"].map(pivot).fillna(0).astype(int)
 
 sentimen_summary = load_sentiment_summary()
+df_articles      = load_articles()
 IS_DUMMY = not (PROCESSED_DIR / "final.csv").exists()
 
 # ---------------------------------------------------------------------------
-# 2. Build satu peta Folium per layer dengan neon colormap
+# 2. Build satu peta Folium per layer dengan neon colormap + marker kejadian
 # ---------------------------------------------------------------------------
+ICON_COLOR = {
+    "kriminalitas":      "orange",
+    "kekerasan_seksual": "pink",
+    "penyakit_menular":  "green",
+}
+
 def make_map(key: str) -> str:
     cfg    = LAYERS[key]
     neon   = cfg["neon"]
@@ -185,6 +208,60 @@ def make_map(key: str) -> str:
         ),
     ).add_to(m)
 
+    # ── Marker kejadian dari berita (per kategori) ──
+    if not df_articles.empty:
+        df_kat = df_articles[df_articles["kategori"] == key].copy()
+        for _, row in df_kat.iterrows():
+            try:
+                lat, lon = float(row["lat"]), float(row["lon"])
+            except (ValueError, TypeError):
+                continue
+
+            kab   = str(row.get("kabupaten") or "")
+            judul = str(row.get("judul") or "")[:120]
+            desk  = str(row.get("deskripsi") or "")[:200]
+            url   = str(row.get("url") or "#")
+            tgl   = str(row.get("tanggal") or "")[:16]
+            src   = str(row.get("sumber") or "")
+
+            popup_html = f"""
+            <div style="
+              background:#0a0a1f;color:{neon};
+              font-family:'Share Tech Mono',monospace;
+              font-size:12px;border:1px solid {neon};
+              padding:10px;max-width:280px;
+              box-shadow:0 0 12px {neon}55;
+            ">
+              <div style="font-weight:bold;font-size:13px;margin-bottom:6px;
+                color:#ffffff;border-bottom:1px solid {neon}44;padding-bottom:4px;">
+                {judul}
+              </div>
+              <div style="color:{neon}99;font-size:11px;margin-bottom:6px;">
+                {desk}
+              </div>
+              <div style="font-size:10px;color:{neon}66;margin-bottom:8px;">
+                {tgl} &nbsp;|&nbsp; {src}
+                {'&nbsp;|&nbsp;' + kab if kab else ''}
+              </div>
+              <a href="{url}" target="_blank"
+                 style="color:{neon};text-decoration:none;font-size:11px;
+                   border:1px solid {neon};padding:2px 8px;">
+                BACA SELENGKAPNYA &rarr;
+              </a>
+            </div>"""
+
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=7,
+                color=neon,
+                fill=True,
+                fill_color=neon,
+                fill_opacity=0.85,
+                weight=2,
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=f"{judul[:60]}..." if len(judul) > 60 else judul,
+            ).add_to(m)
+
     return m._repr_html_()
 
 
@@ -195,11 +272,13 @@ maps = {key: make_map(key) for key in LAYERS}
 # ---------------------------------------------------------------------------
 stats = {
     key: {
-        "total": int(data[key].sum()),
-        "avg":   int(data[key].mean()),
-        "max":   int(data[key].max()),
-        "min":   int(data[key].min()),
-        "top":   data.nlargest(5, key)[["id_wilayah", key]].values.tolist(),
+        "total":   int(data[key].sum()),
+        "avg":     int(data[key].mean()),
+        "max":     int(data[key].max()),
+        "min":     int(data[key].min()),
+        "top":     data.nlargest(5, key)[["id_wilayah", key]].values.tolist(),
+        "markers": int(len(df_articles[df_articles["kategori"] == key]))
+                   if not df_articles.empty else 0,
     }
     for key in LAYERS
 }
@@ -443,6 +522,19 @@ HTML = f"""<!DOCTYPE html>
     </table>
 
     <hr class="div"/>
+    <div class="sec">// TITIK KEJADIAN</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 4px;">
+      <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--neon)" opacity="0.85"/></svg>
+      <span style="font-size:0.7rem;color:rgba(255,255,255,0.5)">
+        <span id="marker-count" style="color:var(--neon);font-family:'Orbitron',sans-serif;font-size:0.75rem">0</span>
+        &nbsp;kejadian terdeteksi dari berita
+      </span>
+    </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 6px;">
+      Klik titik di peta untuk lihat detail berita
+    </div>
+
+    <hr class="div"/>
     <div class="sec">// ANALISIS SENTIMEN</div>
     <div id="sent-panel">
       <div class="sent-row"><span class="sent-label">NEGATIF</span><div class="sent-bar"><div class="sent-fill" id="sent-neg" style="background:#ff4444;width:0%"></div></div><span class="sent-count" id="sent-neg-n">0</span></div>
@@ -514,6 +606,10 @@ function switchLayer(key, btn) {{
   ).join('');
 
   updateSentimen(key);
+
+  // Update marker count
+  const mc = document.getElementById('marker-count');
+  if (mc) mc.textContent = (s.markers || 0).toLocaleString('id-ID');
 
   if (blobUrl) URL.revokeObjectURL(blobUrl);
   blobUrl = URL.createObjectURL(new Blob([MAPS[key]], {{type:'text/html'}}));
