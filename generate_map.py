@@ -257,61 +257,7 @@ def make_map(key: str) -> str:
         ),
     ).add_to(m)
 
-    # Marker tidak di-embed statis — dikirim via postMessage dari parent
-    # agar bisa difilter per rentang waktu tanpa regenerasi peta
-
-    # Inject script penerima postMessage untuk marker dinamis
-    marker_receiver = """
-<script>
-window.addEventListener('message', function(e) {
-  if (!e.data || e.data.type !== 'ADD_MARKERS') return;
-  var markers = e.data.markers || [];
-  var neon = e.data.neon || '#00ffff';
-  // Cari map Leaflet yang sudah ada
-  var maps = Object.values(window).filter(function(v){
-    return v && typeof v === 'object' && v._leaflet_id;
-  });
-  var lmap = null;
-  document.querySelectorAll('.folium-map').forEach(function(el){
-    if (el._leaflet_id) lmap = window[Object.keys(window).find(k => window[k] === el)];
-  });
-  // Fallback: ambil dari variabel global Leaflet
-  if (!lmap) {
-    for (var k in window) {
-      try {
-        if (window[k] && window[k]._leaflet_id && window[k].getCenter) { lmap = window[k]; break; }
-      } catch(err){}
-    }
-  }
-  if (!lmap) return;
-  // Hapus layer marker lama
-  if (window._markerLayer) { window._markerLayer.clearLayers(); }
-  else { window._markerLayer = L.layerGroup().addTo(lmap); }
-
-  markers.forEach(function(a) {
-    var circle = L.circleMarker([a.lat, a.lon], {
-      radius: 7, color: neon, fillColor: neon,
-      fillOpacity: 0.85, weight: 2
-    });
-    var popup = '<div style="background:#0a0a1f;color:' + neon + ';' +
-      'font-family:monospace;font-size:12px;border:1px solid ' + neon + ';' +
-      'padding:10px;max-width:280px;box-shadow:0 0 12px ' + neon + '55;">' +
-      '<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;' +
-      'border-bottom:1px solid ' + neon + '44;padding-bottom:4px;">' + a.judul + '</div>' +
-      '<div style="color:' + neon + '99;font-size:11px;margin-bottom:6px;">' + a.desk + '</div>' +
-      '<div style="font-size:10px;color:' + neon + '66;margin-bottom:8px;">' +
-      a.tgl + (a.src ? ' | ' + a.src : '') + (a.kab ? ' | ' + a.kab : '') + '</div>' +
-      '<a href="' + a.url + '" target="_blank" style="color:' + neon + ';' +
-      'text-decoration:none;font-size:11px;border:1px solid ' + neon + ';padding:2px 8px;">' +
-      'BACA SELENGKAPNYA &rarr;</a></div>';
-    circle.bindPopup(popup, {maxWidth: 300});
-    circle.bindTooltip(a.judul.slice(0,60) + (a.judul.length>60?'...':''));
-    window._markerLayer.addLayer(circle);
-  });
-});
-</script>"""
-    html = m._repr_html_()
-    return html.replace("</body>", marker_receiver + "</body>")
+    return m._repr_html_()
 
 
 maps = {key: make_map(key) for key in LAYERS}
@@ -874,24 +820,25 @@ function switchCrimeType(jenis, btn) {{
 
   if (!jenis) {{
     updateStats(STATS['kriminalitas'], LAYERS['kriminalitas'].neon, 'kriminalitas');
-    loadMap(MAPS['kriminalitas']);
     document.documentElement.style.setProperty('--neon', LAYERS['kriminalitas'].neon);
+    buildMapWithFilter('kriminalitas', currentDays);
   }} else {{
     const s = CRIME_TYPE_STATS[jenis] || {{}};
     updateStats(s, s.neon || neon, null);
-    loadMap(CRIME_TYPE_MAPS[jenis]);
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    blobUrl = URL.createObjectURL(new Blob([CRIME_TYPE_MAPS[jenis]||''], {{type:'text/html'}}));
+    document.getElementById('map-frame').src = blobUrl;
   }}
 }}
 
 function switchLayer(key, btn) {{
-  currentLayer = key;
+  currentKey = key;
   const neon = LAYERS[key].neon;
   document.documentElement.style.setProperty('--neon', neon);
 
   document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
-  // Tampilkan/sembunyikan panel jenis kejahatan
   const crimePanel = document.getElementById('crime-type-panel');
   if (crimePanel) crimePanel.style.display = key === 'kriminalitas' ? 'block' : 'none';
 
@@ -899,12 +846,8 @@ function switchLayer(key, btn) {{
   updateStats(s, neon, key);
   updateSentimen(key);
 
-  const mc = document.getElementById('marker-count');
-  if (mc) mc.textContent = (s.markers || 0).toLocaleString('id-ID');
+  buildMapWithFilter(key, currentDays);
 
-  loadMap(MAPS[key]);
-
-  // Reset crime type selection
   if (key === 'kriminalitas') {{
     const firstCrimeBtn = document.querySelector('.crime-btn');
     if (firstCrimeBtn) {{
@@ -983,18 +926,22 @@ updateSystemStatus();
 setInterval(updateSystemStatus, 60000);
 
 // ── Filter waktu & rebuild peta dengan marker ──
-let currentDays = 7;
+let currentDays = 0;   // default: semua artikel
 let currentKey  = 'kriminalitas';
 
 function parseArticleDate(tanggal) {{
   if (!tanggal) return null;
-  // Format RSS: "Thu, 15 May 2026 14:00:00 +0700" atau ISO
   try {{ return new Date(tanggal); }} catch(e) {{ return null; }}
 }}
 
+function _escapeHtml(s) {{
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}}
+
 function buildMapWithFilter(key, days) {{
-  const neon     = LAYERS[key] ? LAYERS[key].neon : NEON_MAP[key] || '#00ffff';
-  const cutoff   = days > 0 ? new Date(Date.now() - days * 86400000) : null;
+  const neon   = LAYERS[key] ? LAYERS[key].neon : NEON_MAP[key] || '#00ffff';
+  const cutoff = days > 0 ? new Date(Date.now() - days * 86400000) : null;
+
   const filtered = ARTICLES.filter(a => {{
     if (a.kategori !== key) return false;
     if (!a.lat || !a.lon)  return false;
@@ -1008,27 +955,67 @@ function buildMapWithFilter(key, days) {{
   document.getElementById('marker-count').textContent =
     filtered.length.toLocaleString('id-ID');
 
-  // Bangun iframe HTML baru dengan marker yang sudah difilter
-  const baseHtml = MAPS[key];
-  if (!baseHtml) return;
+  // Bangun script marker yang di-inject ke HTML peta
+  const markerScript = `<script>
+(function() {{
+  var _neon = "${{neon}}";
+  var _articles = ${{JSON.stringify(filtered)}};
+  function addMarkers(lmap) {{
+    var layer = L.layerGroup().addTo(lmap);
+    _articles.forEach(function(a) {{
+      var c = L.circleMarker([a.lat, a.lon], {{
+        radius:7, color:_neon, fillColor:_neon, fillOpacity:0.85, weight:2
+      }});
+      var judul = String(a.judul||'').slice(0,120);
+      var desk  = String(a.deskripsi||'').slice(0,200);
+      var tgl   = String(a.tanggal||'').slice(0,16);
+      var src   = String(a.sumber||'');
+      var kab   = String(a.kabupaten||'');
+      var url   = String(a.url||'#');
+      var popup =
+        '<div style="background:#0a0a1f;color:'+_neon+';font-family:monospace;' +
+        'font-size:12px;border:1px solid '+_neon+';padding:10px;max-width:280px;' +
+        'box-shadow:0 0 12px '+_neon+'55;">' +
+        '<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;' +
+        'border-bottom:1px solid '+_neon+'44;padding-bottom:4px;">'+judul+'</div>' +
+        '<div style="color:'+_neon+'99;font-size:11px;margin-bottom:6px;">'+desk+'</div>' +
+        '<div style="font-size:10px;color:'+_neon+'66;margin-bottom:8px;">'+
+        tgl+(src?' | '+src:'')+(kab?' | '+kab:'')+'</div>' +
+        '<a href="'+url+'" target="_blank" style="color:'+_neon+';text-decoration:none;' +
+        'font-size:11px;border:1px solid '+_neon+';padding:2px 8px;">' +
+        'BACA SELENGKAPNYA &rarr;</a></div>';
+      c.bindPopup(popup, {{maxWidth:300}});
+      c.bindTooltip(judul.slice(0,60)+(judul.length>60?'...':''));
+      layer.addLayer(c);
+    }});
+  }}
+  // Temukan objek Leaflet map dari variabel global
+  function findLeafletMap() {{
+    for (var k in window) {{
+      try {{
+        var v = window[k];
+        if (v && typeof v === 'object' && typeof v.getCenter === 'function' && v._leaflet_id) {{
+          return v;
+        }}
+      }} catch(e) {{}}
+    }}
+    return null;
+  }}
+  var lmap = findLeafletMap();
+  if (lmap) {{ addMarkers(lmap); }}
+  else {{ document.addEventListener('DOMContentLoaded', function() {{
+    lmap = findLeafletMap(); if (lmap) addMarkers(lmap);
+  }}); }}
+}})();
+</script>`;
 
-  // Inject marker ke dalam iframe map dengan postMessage
+  // Inject marker script ke base map HTML dan buat blob baru
+  const baseHtml = MAPS[key] || '';
+  const fullHtml = baseHtml.replace('</body>', markerScript + '</body>');
+
   if (blobUrl) URL.revokeObjectURL(blobUrl);
-  blobUrl = URL.createObjectURL(new Blob([baseHtml], {{type:'text/html'}}));
-  const frame = document.getElementById('map-frame');
-  frame.src = blobUrl;
-
-  // Setelah iframe load, kirim data marker via postMessage
-  frame.onload = () => {{
-    const markerData = filtered.map(a => ({{
-      lat: a.lat, lon: a.lon,
-      judul: a.judul || '', desk: (a.deskripsi || '').slice(0,200),
-      url: a.url || '#', tgl: (a.tanggal || '').slice(0,16),
-      src: a.sumber || '', kab: a.kabupaten || '',
-      neon: neon,
-    }}));
-    frame.contentWindow.postMessage({{type:'ADD_MARKERS', markers: markerData, neon}}, '*');
-  }};
+  blobUrl = URL.createObjectURL(new Blob([fullHtml], {{type:'text/html'}}));
+  document.getElementById('map-frame').src = blobUrl;
 }}
 
 function setTimeFilter(days, btn) {{
@@ -1037,56 +1024,6 @@ function setTimeFilter(days, btn) {{
   currentDays = days;
   buildMapWithFilter(currentKey, days);
 }}
-
-// Override loadMap agar selalu pakai filter aktif
-const _origLoadMap = loadMap;
-function loadMap(html) {{
-  // Tidak dipakai langsung lagi — pakai buildMapWithFilter
-  if (blobUrl) URL.revokeObjectURL(blobUrl);
-  blobUrl = URL.createObjectURL(new Blob([html], {{type:'text/html'}}));
-  document.getElementById('map-frame').src = blobUrl;
-}}
-
-// Override switchLayer untuk pakai buildMapWithFilter
-const _origSwitchLayer = switchLayer;
-function switchLayer(key, btn) {{
-  currentKey = key;
-  const neon = LAYERS[key] ? LAYERS[key].neon : '#00ffff';
-  document.documentElement.style.setProperty('--neon', neon);
-  document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-
-  const crimePanel = document.getElementById('crime-type-panel');
-  if (crimePanel) crimePanel.style.display = key === 'kriminalitas' ? 'block' : 'none';
-
-  const s = STATS[key];
-  updateStats(s, neon, key);
-  updateSentimen(key);
-
-  const mc = document.getElementById('marker-count');
-  if (mc) mc.textContent = (s.markers || 0).toLocaleString('id-ID');
-
-  buildMapWithFilter(key, currentDays);
-
-  if (key === 'kriminalitas') {{
-    const firstCrimeBtn = document.querySelector('.crime-btn');
-    if (firstCrimeBtn) {{
-      firstCrimeBtn.style.background = `color-mix(in srgb,${{neon}} 8%,transparent)`;
-      firstCrimeBtn.style.borderColor = neon;
-      firstCrimeBtn.style.color = neon;
-    }}
-    document.querySelectorAll('.crime-btn:not(:first-child)').forEach(b => {{
-      b.style.background = 'transparent';
-      b.style.borderColor = 'rgba(255,255,255,0.07)';
-      b.style.color = 'rgba(255,255,255,0.4)';
-    }});
-  }}
-}}
-
-// Listener postMessage dari iframe — marker injection
-window.addEventListener('message', (e) => {{
-  // iframe mengirim balik sinyal "ready" — tidak dipakai saat ini
-}});
 
 document.addEventListener('DOMContentLoaded', () => {{
   const firstBtn = document.querySelector('.layer-btn');
