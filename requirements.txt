@@ -1,0 +1,33 @@
+# --- Web Dashboard ---
+streamlit>=1.35.0
+
+# --- Geospatial ---
+geopandas>=0.14.0
+folium>=0.16.0
+streamlit-folium>=0.20.0
+shapely>=2.0.0
+
+# --- Data Processing ---
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.0       # baca file Excel BPS
+
+# --- Web Scraping ---
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+
+# --- Twitter / X API ---
+tweepy>=4.14.0
+
+# --- Sentiment Analysis (IndoBERT) ---
+transformers>=4.40.0
+torch>=2.2.0
+sentencepiece>=0.2.0
+
+# --- Database ---
+# sqlite3 sudah built-in di Python, tidak perlu install
+
+# --- Utilities ---
+python-dotenv>=1.0.0   # load API keys dari .env
+tqdm>=4.66.0           # progress bar saat scraping
