@@ -427,6 +427,17 @@ sentimen_json         = json.dumps(sentimen_summary)
 data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
 data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
 
+# Timestamp scraping untuk indikator status di header
+_news_ts = ""
+try:
+    _df_ts = pd.read_csv(PROCESSED_DIR.parent / "raw" / "news.csv")
+    _news_ts = str(_df_ts["scraped_at"].max()) if "scraped_at" in _df_ts.columns else ""
+except Exception:
+    pass
+scraped_at_iso = _news_ts  # format: "2026-05-15T21:20:40.520807"
+total_articles = len(df_articles) if not df_articles.empty else 0
+total_markers  = sum(stats[k]["markers"] for k in LAYERS)
+
 # ---------------------------------------------------------------------------
 # 4. HTML Template
 # ---------------------------------------------------------------------------
@@ -630,9 +641,9 @@ HTML = f"""<!DOCTYPE html>
     <em>INDONESIA CRIME &amp; HEALTH SURVEILLANCE</em>
   </div>
   <div class="hud-right">
-    <span><span class="pulse"></span>SYSTEM ONLINE</span>
-    <span>34 PROVINSI</span>
-    <span>{data_badge}</span>
+    <span id="sys-status"><span class="pulse" id="sys-pulse"></span><span id="sys-label">MEMUAT...</span></span>
+    <span>34 PROV &nbsp;|&nbsp; <span id="hud-markers">{total_markers}</span> TITIK</span>
+    <span id="hud-age" title="Waktu scraping terakhir">—</span>
     <span id="clk">--:--:--</span>
   </div>
 </header>
@@ -864,14 +875,72 @@ function switchLayer(key, btn) {{
   }}
 }}
 
+// ── Jam digital ──
 setInterval(() => {{
   document.getElementById('clk').textContent =
     new Date().toLocaleTimeString('id-ID', {{hour12:false}});
 }}, 1000);
 
+// ── Status sistem berdasarkan usia data ──
+const SCRAPED_AT = "{scraped_at_iso}";
+
+function updateSystemStatus() {{
+  const label = document.getElementById('sys-label');
+  const pulse = document.getElementById('sys-pulse');
+  const ageEl = document.getElementById('hud-age');
+  if (!SCRAPED_AT) {{
+    label.textContent = 'NO DATA';
+    pulse.style.background = '#ff4444';
+    pulse.style.boxShadow  = '0 0 8px #ff4444';
+    ageEl.textContent = '—';
+    return;
+  }}
+
+  const scraped = new Date(SCRAPED_AT);
+  const now     = new Date();
+  const diffMs  = now - scraped;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr  = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  // Format usia data
+  let ageStr;
+  if (diffMin < 1)       ageStr = 'BARU SAJA';
+  else if (diffMin < 60) ageStr = diffMin + ' MNT LALU';
+  else if (diffHr < 24)  ageStr = diffHr + ' JAM LALU';
+  else                   ageStr = diffDay + ' HARI LALU';
+  ageEl.textContent = ageStr;
+  ageEl.title = 'Scraping: ' + scraped.toLocaleString('id-ID');
+
+  // Status & warna
+  if (diffHr < 6) {{
+    label.textContent = 'SYSTEM ONLINE';
+    pulse.style.background = '#00ff41';
+    pulse.style.boxShadow  = '0 0 8px #00ff41';
+    label.style.color      = '#00ff41';
+  }} else if (diffHr < 24) {{
+    label.textContent = 'DATA PERLU REFRESH';
+    pulse.style.background = '#ffaa00';
+    pulse.style.boxShadow  = '0 0 8px #ffaa00';
+    label.style.color      = '#ffaa00';
+    pulse.style.animationDuration = '0.7s';
+  }} else {{
+    label.textContent = 'DATA USANG';
+    pulse.style.background = '#ff4444';
+    pulse.style.boxShadow  = '0 0 8px #ff4444';
+    label.style.color      = '#ff4444';
+    pulse.style.animationDuration = '0.3s';
+  }}
+}}
+
+// Update status setiap menit
+updateSystemStatus();
+setInterval(updateSystemStatus, 60000);
+
 document.addEventListener('DOMContentLoaded', () => {{
   const firstBtn = document.querySelector('.layer-btn');
   switchLayer(firstBtn.dataset.key, firstBtn);
+  updateSystemStatus();
 }});
 </script>
 </body>
