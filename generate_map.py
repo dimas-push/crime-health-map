@@ -955,8 +955,11 @@ function buildMapWithFilter(key, days) {{
   document.getElementById('marker-count').textContent =
     filtered.length.toLocaleString('id-ID');
 
-  // Bangun script marker yang di-inject ke HTML peta
-  const markerScript = `<script>
+  // Bangun script marker — pecah tag </script> agar browser tidak salah parse
+  // Teknik: '<' + '/script>' mencegah premature termination
+  const _open  = '<' + 'script>';
+  const _close = '<' + '/script>';
+  const markerScript = _open + `
 (function() {{
   var _neon = "${{neon}}";
   var _articles = ${{JSON.stringify(filtered)}};
@@ -989,7 +992,6 @@ function buildMapWithFilter(key, days) {{
       layer.addLayer(c);
     }});
   }}
-  // Temukan objek Leaflet map dari variabel global
   function findLeafletMap() {{
     for (var k in window) {{
       try {{
@@ -1007,7 +1009,7 @@ function buildMapWithFilter(key, days) {{
     lmap = findLeafletMap(); if (lmap) addMarkers(lmap);
   }}); }}
 }})();
-</script>`;
+` + _close;
 
   // Inject marker script ke base map HTML dan buat blob baru
   const baseHtml = MAPS[key] || '';
