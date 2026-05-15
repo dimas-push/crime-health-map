@@ -47,6 +47,20 @@ def load_or_build_data() -> pd.DataFrame:
     return df
 
 
+def load_crime_detail() -> pd.DataFrame:
+    """Ambil data kriminalitas detail per jenis dari SQLite."""
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql(
+                "SELECT nama_provinsi, jenis_kejahatan, jumlah_kasus FROM kriminalitas_detail",
+                conn,
+            )
+        except Exception:
+            return pd.DataFrame()
+
+
 def load_articles() -> pd.DataFrame:
     """Ambil artikel dengan koordinat dari SQLite untuk marker layer."""
     if not DB_PATH.exists():
@@ -138,7 +152,19 @@ for kat in ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]:
 
 sentimen_summary = load_sentiment_summary()
 df_articles      = load_articles()
+df_crime_detail  = load_crime_detail()
 IS_DUMMY = not (PROCESSED_DIR / "final.csv").exists()
+
+# Sub-layer kriminalitas per jenis kejahatan
+CRIME_TYPES = {
+    "pencurian":      {"label": "PENCURIAN",       "neon": "#ff9900"},
+    "narkoba":        {"label": "NARKOBA",          "neon": "#ff6b35"},
+    "penipuan":       {"label": "PENIPUAN",         "neon": "#ffcc00"},
+    "penganiayaan":   {"label": "PENGANIAYAAN",     "neon": "#ff4444"},
+    "pembunuhan":     {"label": "PEMBUNUHAN",       "neon": "#cc0000"},
+    "korupsi":        {"label": "KORUPSI",          "neon": "#ff8800"},
+    "begal_curanmor": {"label": "BEGAL/CURANMOR",  "neon": "#ff5500"},
+}
 
 # ---------------------------------------------------------------------------
 # 2. Build satu peta Folium per layer dengan neon colormap + marker kejadian
@@ -267,6 +293,91 @@ def make_map(key: str) -> str:
 
 maps = {key: make_map(key) for key in LAYERS}
 
+
+def make_crime_type_map(jenis: str) -> str:
+    """Buat peta choropleth per jenis kejahatan dari kriminalitas_detail."""
+    cfg  = CRIME_TYPES[jenis]
+    neon = cfg["neon"]
+
+    if df_crime_detail.empty:
+        return make_map("kriminalitas")
+
+    pivot = (
+        df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
+        .groupby("nama_provinsi")["jumlah_kasus"]
+        .sum()
+    )
+    col_data = pd.DataFrame({"id_wilayah": gdf[id_col]})
+    col_data[jenis] = col_data["id_wilayah"].map(pivot).fillna(0).astype(int)
+
+    colormap = cm.LinearColormap(
+        colors=["#0a0a1f", "#1a0800", "#551500", "#aa3300", neon],
+        vmin=col_data[jenis].min(),
+        vmax=max(col_data[jenis].max(), 1),
+    )
+
+    m = folium.Map(location=[-2.5, 118.0], zoom_start=5, tiles=None, zoom_control=False)
+    folium.TileLayer(
+        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attr="© CartoDB", max_zoom=19,
+    ).add_to(m)
+
+    merged = gdf.merge(col_data, left_on=id_col, right_on="id_wilayah", how="left")
+    geojson_data = json.loads(merged.to_json())
+
+    folium.GeoJson(
+        geojson_data,
+        style_function=lambda feat: {
+            "fillColor":   colormap(feat["properties"].get(jenis) or 0),
+            "fillOpacity": 0.75,
+            "color":       "#0a0a1f",
+            "weight":      0.8,
+        },
+        highlight_function=lambda _: {
+            "fillColor": neon, "fillOpacity": 0.35,
+            "color": neon, "weight": 2,
+        },
+        tooltip=folium.GeoJsonTooltip(
+            fields=[id_col, jenis],
+            aliases=["Wilayah", cfg["label"]],
+            style=(
+                f"background:#0a0a1f;color:{neon};"
+                f"font-family:'Share Tech Mono',monospace;font-size:12px;"
+                f"border:1px solid {neon};border-radius:0;"
+            ),
+        ),
+    ).add_to(m)
+    return m._repr_html_()
+
+
+crime_type_maps = {j: make_crime_type_map(j) for j in CRIME_TYPES}
+crime_type_stats = {}
+for jenis, cfg in CRIME_TYPES.items():
+    if df_crime_detail.empty:
+        crime_type_stats[jenis] = {"total": 0, "avg": 0, "max": 0, "min": 0, "top": []}
+        continue
+    pivot = (
+        df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
+        .groupby("nama_provinsi")["jumlah_kasus"]
+        .sum()
+    )
+    col_data = gdf[id_col].map(pivot).fillna(0).astype(int)
+    top5 = (
+        df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
+        .groupby("nama_provinsi")["jumlah_kasus"].sum()
+        .nlargest(5).reset_index()
+        .values.tolist()
+    )
+    crime_type_stats[jenis] = {
+        "total": int(col_data.sum()),
+        "avg":   int(col_data.mean()),
+        "max":   int(col_data.max()),
+        "min":   int(col_data.min()),
+        "top":   [[str(r[0]), int(r[1])] for r in top5],
+        "neon":  cfg["neon"],
+        "label": cfg["label"],
+    }
+
 # ---------------------------------------------------------------------------
 # 3. Statistik per layer
 # ---------------------------------------------------------------------------
@@ -283,7 +394,9 @@ stats = {
     for key in LAYERS
 }
 
-maps_json      = json.dumps(maps)
+maps_json           = json.dumps(maps)
+crime_type_maps_json = json.dumps(crime_type_maps)
+crime_type_stats_json = json.dumps(crime_type_stats)
 stats_json     = json.dumps(stats)
 layers_json    = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
 sentimen_json  = json.dumps(sentimen_summary)
@@ -522,6 +635,31 @@ HTML = f"""<!DOCTYPE html>
     </table>
 
     <hr class="div"/>
+    <div class="sec">// JENIS KEJAHATAN</div>
+    <div id="crime-type-panel" style="display:none">
+      <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:2px 4px 6px;">
+        Sub-kategori kriminalitas per jenis
+      </div>
+      <button class="crime-btn" data-jenis="" onclick="switchCrimeType('',this)"
+        style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:4px;
+          background:color-mix(in srgb,#ff6b35 8%,transparent);
+          border:1px solid #ff6b35;color:#ff6b35;
+          font-family:'Share Tech Mono',monospace;font-size:0.68rem;
+          cursor:pointer;width:100%;text-align:left;">
+        &#9646; SEMUA JENIS
+      </button>
+      {''.join(f"""<button class="crime-btn" data-jenis="{j}"
+          onclick="switchCrimeType('{j}',this)"
+          style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;
+            background:transparent;border:1px solid rgba(255,255,255,0.07);
+            color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;
+            font-size:0.68rem;cursor:pointer;width:100%;text-align:left;
+            transition:all 0.2s;" data-neon="{cfg['neon']}">
+          &#9656; {cfg['label']}
+        </button>""" for j, cfg in CRIME_TYPES.items())}
+    </div>
+
+    <hr class="div"/>
     <div class="sec">// TITIK KEJADIAN</div>
     <div style="display:flex;align-items:center;gap:8px;padding:6px 4px;">
       <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--neon)" opacity="0.85"/></svg>
@@ -562,11 +700,14 @@ HTML = f"""<!DOCTYPE html>
 </div>
 
 <script>
-const MAPS     = {maps_json};
+const MAPS            = {maps_json};
+const CRIME_TYPE_MAPS = {crime_type_maps_json};
+const CRIME_TYPE_STATS = {crime_type_stats_json};
 const STATS    = {stats_json};
 const LAYERS   = {layers_json};
 const SENTIMEN = {sentimen_json};
 let blobUrl    = null;
+let currentLayer = 'kriminalitas';
 
 function updateSentimen(key) {{
   const s   = SENTIMEN[key] || {{}};
@@ -583,37 +724,81 @@ function updateSentimen(key) {{
   document.getElementById('sent-pos-n').textContent = pos;
 }}
 
-function switchLayer(key, btn) {{
-  const neon = LAYERS[key].neon;
+function loadMap(html) {{
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrl = URL.createObjectURL(new Blob([html], {{type:'text/html'}}));
+  document.getElementById('map-frame').src = blobUrl;
+}}
 
+function updateStats(s, neon) {{
+  if (neon) document.documentElement.style.setProperty('--neon', neon);
+  document.getElementById('s-total').textContent = (s.total||0).toLocaleString('id-ID');
+  document.getElementById('s-avg').textContent   = (s.avg||0).toLocaleString('id-ID');
+  document.getElementById('s-max').textContent   = (s.max||0).toLocaleString('id-ID');
+  document.getElementById('s-min').textContent   = (s.min||0).toLocaleString('id-ID');
+  document.getElementById('top-body').innerHTML  = (s.top||[]).map(([w,k],i)=>
+    `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
+     <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
+  ).join('');
+}}
+
+function switchCrimeType(jenis, btn) {{
+  document.querySelectorAll('.crime-btn').forEach(b => {{
+    b.style.background = 'transparent';
+    b.style.borderColor = 'rgba(255,255,255,0.07)';
+    b.style.color = 'rgba(255,255,255,0.4)';
+  }});
+  const neon = btn.dataset.neon || LAYERS['kriminalitas'].neon;
+  btn.style.background = `color-mix(in srgb,${{neon}} 10%,transparent)`;
+  btn.style.borderColor = neon;
+  btn.style.color = neon;
+
+  if (!jenis) {{
+    updateStats(STATS['kriminalitas'], LAYERS['kriminalitas'].neon);
+    loadMap(MAPS['kriminalitas']);
+    document.documentElement.style.setProperty('--neon', LAYERS['kriminalitas'].neon);
+  }} else {{
+    const s = CRIME_TYPE_STATS[jenis] || {{}};
+    updateStats(s, s.neon || neon);
+    loadMap(CRIME_TYPE_MAPS[jenis]);
+  }}
+}}
+
+function switchLayer(key, btn) {{
+  currentLayer = key;
+  const neon = LAYERS[key].neon;
   document.documentElement.style.setProperty('--neon', neon);
 
   document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
+  // Tampilkan/sembunyikan panel jenis kejahatan
+  const crimePanel = document.getElementById('crime-type-panel');
+  if (crimePanel) crimePanel.style.display = key === 'kriminalitas' ? 'block' : 'none';
+
   const s = STATS[key];
-  document.getElementById('s-total').textContent = s.total.toLocaleString('id-ID');
-  document.getElementById('s-avg').textContent   = s.avg.toLocaleString('id-ID');
-  document.getElementById('s-max').textContent   = s.max.toLocaleString('id-ID');
-  document.getElementById('s-min').textContent   = s.min.toLocaleString('id-ID');
-
-  document.getElementById('top-body').innerHTML = s.top.map(([w, k], i) =>
-    `<tr>
-      <td><span class="rank">${{i+1}}.</span></td>
-      <td>${{w}}</td>
-      <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td>
-    </tr>`
-  ).join('');
-
+  updateStats(s, neon);
   updateSentimen(key);
 
-  // Update marker count
   const mc = document.getElementById('marker-count');
   if (mc) mc.textContent = (s.markers || 0).toLocaleString('id-ID');
 
-  if (blobUrl) URL.revokeObjectURL(blobUrl);
-  blobUrl = URL.createObjectURL(new Blob([MAPS[key]], {{type:'text/html'}}));
-  document.getElementById('map-frame').src = blobUrl;
+  loadMap(MAPS[key]);
+
+  // Reset crime type selection
+  if (key === 'kriminalitas') {{
+    const firstCrimeBtn = document.querySelector('.crime-btn');
+    if (firstCrimeBtn) {{
+      firstCrimeBtn.style.background = `color-mix(in srgb,${{neon}} 8%,transparent)`;
+      firstCrimeBtn.style.borderColor = neon;
+      firstCrimeBtn.style.color = neon;
+    }}
+    document.querySelectorAll('.crime-btn:not(:first-child)').forEach(b => {{
+      b.style.background = 'transparent';
+      b.style.borderColor = 'rgba(255,255,255,0.07)';
+      b.style.color = 'rgba(255,255,255,0.4)';
+    }});
+  }}
 }}
 
 setInterval(() => {{

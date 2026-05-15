@@ -323,6 +323,101 @@ _COORDS: dict[str, tuple[float, float]] = {
     "jayawijaya": (-3.9667, 138.9833), "tolikara": (-3.5333, 138.9833),
 }
 
+# ---------------------------------------------------------------------------
+# Alias kota populer & singkatan yang sering muncul di berita
+# ---------------------------------------------------------------------------
+_ALIASES: dict[str, str] = {
+    # Singkatan Jakarta
+    "jakbar":  "jakarta barat",
+    "jaktim":  "jakarta timur",
+    "jaksel":  "jakarta selatan",
+    "jakut":   "jakarta utara",
+    "jakpus":  "jakarta pusat",
+    "jakarta": "kota jakarta pusat",
+    # Kota besar tanpa "kota"
+    "bandung":   "kota bandung",
+    "surabaya":  "kota surabaya",
+    "medan":     "kota medan",
+    "semarang":  "kota semarang",
+    "makassar":  "kota makassar",
+    "palembang": "kota palembang",
+    "tangerang": "kota tangerang",
+    "depok":     "kota depok",
+    "bekasi":    "kota bekasi",
+    "bogor":     "kota bogor",
+    "pekanbaru": "kota pekanbaru",
+    "batam":     "kota batam",
+    "balikpapan":"kota balikpapan",
+    "samarinda": "kota samarinda",
+    "manado":    "kota manado",
+    "ambon":     "kota ambon",
+    "yogyakarta":"kota yogyakarta",
+    "solo":      "kota surakarta",
+    "surakarta": "kota surakarta",
+    "malang":    "kota malang",
+    "denpasar":  "kota denpasar",
+    "mataram":   "kota mataram",
+    "kupang":    "kota kupang",
+    "jayapura":  "kota jayapura",
+    "sorong":    "kota sorong",
+    "ternate":   "kota ternate",
+    "gorontalo": "kota gorontalo",
+    "kendari":   "kota kendari",
+    "palu":      "kota palu",
+    "pontianak": "kota pontianak",
+    "banjarmasin":"kota banjarmasin",
+    "tarakan":   "kota tarakan",
+    "bengkulu":  "kota bengkulu",
+    "jambi":     "kota jambi",
+    "padang":    "kota padang",
+    "bandar lampung": "kota bandar lampung",
+    "serang":    "kota serang",
+    "cilegon":   "kota cilegon",
+    "tegal":     "kota tegal",
+    "pekalongan":"kota pekalongan",
+    "magelang":  "kota magelang",
+    "salatiga":  "kota salatiga",
+    "kediri":    "kota kediri",
+    "blitar":    "kota blitar",
+    "mojokerto": "kota mojokerto",
+    "madiun":    "kota madiun",
+    "probolinggo":"kota probolinggo",
+    "pasuruan":  "kota pasuruan",
+    "batu":      "kota batu",
+    # Provinsi → ibukota sebagai fallback
+    "lampung":        "kota bandar lampung",
+    "banten":         "kota serang",
+    "jawa barat":     "kota bandung",
+    "jawa tengah":    "kota semarang",
+    "jawa timur":     "kota surabaya",
+    "sumatera utara": "kota medan",
+    "sumatera selatan":"kota palembang",
+    "sulawesi selatan":"kota makassar",
+    "kalimantan timur":"kota samarinda",
+    "kalimantan selatan":"kota banjarmasin",
+    "papua":          "kota jayapura",
+    "papua barat":    "kota sorong",
+    "aceh":           "kota banda aceh",
+    "riau":           "kota pekanbaru",
+    "kepulauan riau": "kota tanjungpinang",
+    "bali":           "kota denpasar",
+    "ntb":            "kota mataram",
+    "ntt":            "kota kupang",
+    "maluku":         "kota ambon",
+    "sulawesi utara": "kota manado",
+    "sulawesi tengah":"kota palu",
+    "gorontalo prov": "kota gorontalo",
+    "bengkulu prov":  "kota bengkulu",
+    "jambi prov":     "kota jambi",
+}
+
+# Kata kerja/kata umum bahasa Indonesia yang sering false-positive
+_BLACKLIST: set[str] = {
+    "buru", "muna", "luwu", "poso", "tebo", "Ende", "pati",
+    "blora", "rote", "alor", "biak", "bima", "palu", "tual",
+    "demak", "gowa", "bone", "wajo", "bulukumba",
+}
+
 
 def _load_cache() -> dict:
     if CACHE_PATH.exists():
@@ -354,18 +449,26 @@ def _nominatim_lookup(nama: str) -> Optional[tuple[float, float]]:
 def get_coords(nama_kabupaten: str) -> Optional[tuple[float, float]]:
     """
     Kembalikan (lat, lon) untuk nama kabupaten/kota.
-    Urutan: kamus statis → cache Nominatim → Nominatim API.
+    Urutan: alias → kamus statis → cache Nominatim → Nominatim API.
     """
     key = str(nama_kabupaten).strip().lower()
 
-    # 1. Kamus statis
+    # 0. Alias
+    if key in _ALIASES:
+        key = _ALIASES[key]
+
+    # 1. Kamus statis (exact match)
     if key in _COORDS:
         return _COORDS[key]
 
-    # 2. Partial match di kamus
-    for k, v in _COORDS.items():
-        if key in k or k in key:
-            return v
+    # 2. Partial match (hanya jika panjang key >= 5 agar tidak false-positive)
+    if len(key) >= 5:
+        for k, v in _COORDS.items():
+            if key == k:
+                return v
+            # hanya match jika key adalah substring yang bermakna
+            if len(key) >= 6 and (key in k and len(key) / len(k) > 0.5):
+                return v
 
     # 3. Cache Nominatim
     cache = _load_cache()

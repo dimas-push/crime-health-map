@@ -229,6 +229,17 @@ def build_final_table(
     return base
 
 
+def load_crime_detail() -> pd.DataFrame:
+    """Load kriminalitas_detail.csv untuk peta sub-kategori kejahatan."""
+    path = RAW_DIR / "kriminalitas_detail.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    df["nama_provinsi"] = df["nama_provinsi"].apply(normalize_provinsi)
+    df = df[df["nama_provinsi"].notna()]
+    return df
+
+
 def load_articles_full() -> pd.DataFrame:
     """
     Load artikel lengkap dari news.csv (dengan lat/lon) untuk tabel marker.
@@ -253,7 +264,8 @@ def load_articles_full() -> pd.DataFrame:
 
 def save_to_sqlite(df_official: pd.DataFrame, df_news: pd.DataFrame,
                    df_tweets: pd.DataFrame, df_final: pd.DataFrame,
-                   df_articles: pd.DataFrame) -> None:
+                   df_articles: pd.DataFrame,
+                   df_crime_detail: pd.DataFrame = pd.DataFrame()) -> None:
     """Simpan semua tabel ke SQLite."""
     with sqlite3.connect(DB_PATH) as conn:
         if not df_official.empty:
@@ -266,6 +278,9 @@ def save_to_sqlite(df_official: pd.DataFrame, df_news: pd.DataFrame,
         if not df_articles.empty:
             df_articles.to_sql("artikel", conn, if_exists="replace", index=False)
             print(f"[process] {len(df_articles)} artikel dengan koordinat disimpan ke tabel 'artikel'.")
+        if not df_crime_detail.empty:
+            df_crime_detail.to_sql("kriminalitas_detail", conn, if_exists="replace", index=False)
+            print(f"[process] {len(df_crime_detail)} baris kriminalitas_detail disimpan ke SQLite.")
     print(f"[process] Database disimpan: {DB_PATH}")
 
 
@@ -291,10 +306,14 @@ def process_all() -> pd.DataFrame:
     articles = load_articles_full()
     print(f"  {len(articles)} artikel dengan koordinat.")
 
+    print("\n[process] Load kriminalitas detail ...")
+    crime_detail = load_crime_detail()
+    print(f"  {len(crime_detail)} baris detail kejahatan.")
+
     print("\n[process] Membangun tabel final ...")
     final = build_final_table(official, news, tweets)
 
-    save_to_sqlite(official, news, tweets, final, articles)
+    save_to_sqlite(official, news, tweets, final, articles, crime_detail)
 
     final.to_csv(CSV_PATH, index=False)
     print(f"[process] CSV final disimpan: {CSV_PATH}")

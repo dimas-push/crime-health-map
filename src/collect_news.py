@@ -20,7 +20,7 @@ import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, str(Path(__file__).parent))
-from geocode import get_coords, _COORDS
+from geocode import get_coords, _COORDS, _ALIASES, _BLACKLIST
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -127,17 +127,33 @@ def _detect_kategori(teks: str) -> Optional[str]:
     return None
 
 
-# Daftar kabupaten/kota dari kamus geocode (diurutkan panjang → pendek
-# agar nama lebih spesifik dicocokkan lebih dulu)
-_KABUPATEN_LIST = sorted(_COORDS.keys(), key=len, reverse=True)
+# Daftar lookup: gabungan kamus koordinat + alias, panjang → pendek
+_LOOKUP_LIST = sorted(
+    list(_COORDS.keys()) + list(_ALIASES.keys()),
+    key=len, reverse=True
+)
+# Hapus duplikat sambil pertahankan urutan
+_seen: set[str] = set()
+_LOOKUP_LIST = [x for x in _LOOKUP_LIST if not (x in _seen or _seen.add(x))]  # type: ignore
 
 
 def _detect_kabupaten(teks: str) -> Optional[str]:
-    """Deteksi nama kabupaten/kota dari teks, kembalikan nama + koordinat."""
+    """
+    Deteksi nama kabupaten/kota dari teks berita.
+    Mengembalikan nama kota yang sudah di-resolve ke kamus koordinat.
+    """
     teks_lower = teks.lower()
-    for kab in _KABUPATEN_LIST:
-        if re.search(r'\b' + re.escape(kab) + r'\b', teks_lower):
-            return kab.title()
+    for nama in _LOOKUP_LIST:
+        # Lewati nama yang sangat pendek (< 4 char) — rawan false positive
+        if len(nama) < 4:
+            continue
+        # Lewati kata yang ada di blacklist
+        if nama in _BLACKLIST or nama.lower() in _BLACKLIST:
+            continue
+        if re.search(r'\b' + re.escape(nama) + r'\b', teks_lower):
+            # Resolve alias ke nama kamus
+            resolved = _ALIASES.get(nama, nama)
+            return resolved.title()
     return None
 
 

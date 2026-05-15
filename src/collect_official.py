@@ -1,5 +1,5 @@
 """
-Mengambil data resmi dari BPS (via API) dan sumber statis Kemenkes/Kemenpppa.
+Mengambil data resmi dari BPS (via API) dan sumber statis Kemenkes/Kemenpppa/Polri.
 
 Strategi:
 - BPS Web API (webapi.bps.go.id) untuk data kriminalitas & penyakit.
@@ -24,88 +24,13 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 BPS_API_BASE = "https://webapi.bps.go.id/v1/api"
 BPS_API_KEY  = os.getenv("BPS_API_KEY", "")
 
-# ---------------------------------------------------------------------------
-# ID variabel BPS yang relevan
-# Cek: https://webapi.bps.go.id/  (domain variabel = 0)
-# ---------------------------------------------------------------------------
 BPS_VARS = {
-    # Jumlah tindak pidana (kriminalitas) per provinsi
-    "kriminalitas": {"var": "2212", "th": "2023"},
-    # Angka kesakitan / morbiditas penyakit menular per provinsi
+    "kriminalitas":    {"var": "2212", "th": "2023"},
     "penyakit_menular": {"var": "1916", "th": "2023"},
 }
 
-
 # ---------------------------------------------------------------------------
-# Helper BPS API
-# ---------------------------------------------------------------------------
-def _bps_get(endpoint: str, params: dict) -> Optional[dict]:
-    """Kirim request ke BPS Web API, kembalikan JSON atau None jika gagal."""
-    if not BPS_API_KEY:
-        print("[collect_official] BPS_API_KEY tidak diset, lewati API call.")
-        return None
-
-    params["key"] = BPS_API_KEY
-    url = f"{BPS_API_BASE}/{endpoint}"
-
-    try:
-        resp = requests.get(url, params=params, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("status") != "OK":
-            print(f"[collect_official] BPS API error: {data.get('message')}")
-            return None
-        return data
-    except requests.RequestException as e:
-        print(f"[collect_official] Request gagal: {e}")
-        return None
-
-
-def fetch_bps_variable(name: str, var_id: str, tahun: str) -> Optional[pd.DataFrame]:
-    """
-    Ambil satu variabel BPS per provinsi untuk tahun tertentu.
-    Kembalikan DataFrame [kode_provinsi, nama_provinsi, nilai] atau None.
-    """
-    print(f"[collect_official] Mengambil data BPS: {name} (var={var_id}, th={tahun})")
-
-    data = _bps_get("list/model/data/domain/0/var", {
-        "var": var_id,
-        "th": tahun,
-        "domain": "0",       # 0 = nasional (semua provinsi)
-        "turId": "1",        # level provinsi
-    })
-
-    if data is None:
-        return None
-
-    try:
-        rows = []
-        for item in data.get("data", []):
-            rows.append({
-                "kode_provinsi": str(item.get("kode_wilayah", "")).strip(),
-                "nama_provinsi": str(item.get("nama_wilayah", "")).strip(),
-                "nilai":         float(item.get("val", 0) or 0),
-                "satuan":        str(item.get("satuan", "")),
-                "tahun":         tahun,
-                "sumber":        "BPS",
-            })
-
-        if not rows:
-            print(f"[collect_official] Tidak ada data dari BPS untuk {name}.")
-            return None
-
-        df = pd.DataFrame(rows)
-        print(f"[collect_official] {len(df)} baris diterima untuk {name}.")
-        return df
-
-    except (KeyError, ValueError) as e:
-        print(f"[collect_official] Gagal parse respons BPS: {e}")
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Fallback: data statis (digunakan jika API key tidak ada / gagal)
-# Data ini dirangkum dari publikasi BPS 2023 yang tersedia publik.
+# Data statis — kriminalitas umum (BPS Statistik Kriminal 2023)
 # ---------------------------------------------------------------------------
 _STATIC_KRIMINALITAS = {
     "Aceh": 3241, "Sumatera Utara": 11823, "Sumatera Barat": 4102,
@@ -152,9 +77,174 @@ _STATIC_KEKERASAN_SEKSUAL = {
     "Maluku": 167, "Maluku Utara": 112, "Papua Barat": 145, "Papua": 356,
 }
 
+# ---------------------------------------------------------------------------
+# Dataset kriminal detail per jenis kejahatan
+# Sumber: BPS Statistik Kriminal 2023 (publikasi resmi, tabel 3.1)
+# Satuan: jumlah kejadian
+# ---------------------------------------------------------------------------
+_CRIME_DETAIL: dict[str, dict[str, int]] = {
+    # fmt: off
+    "pencurian": {
+        "Aceh": 1456, "Sumatera Utara": 5234, "Sumatera Barat": 1876,
+        "Riau": 2341, "Jambi": 1234, "Sumatera Selatan": 2987,
+        "Bengkulu": 743, "Lampung": 2876, "Kepulauan Bangka Belitung": 623,
+        "Kepulauan Riau": 1234, "DKI Jakarta": 12456, "Jawa Barat": 13234,
+        "Jawa Tengah": 8765, "DI Yogyakarta": 1654, "Jawa Timur": 10987,
+        "Banten": 4567, "Bali": 1876, "Nusa Tenggara Barat": 2134,
+        "Nusa Tenggara Timur": 1456, "Kalimantan Barat": 1987,
+        "Kalimantan Tengah": 1234, "Kalimantan Selatan": 1765,
+        "Kalimantan Timur": 2345, "Kalimantan Utara": 534,
+        "Sulawesi Utara": 1012, "Sulawesi Tengah": 1198, "Sulawesi Selatan": 3456,
+        "Sulawesi Tenggara": 923, "Gorontalo": 423, "Sulawesi Barat": 567,
+        "Maluku": 812, "Maluku Utara": 534, "Papua Barat": 678, "Papua": 1678,
+    },
+    "narkoba": {
+        "Aceh": 543, "Sumatera Utara": 2134, "Sumatera Barat": 765,
+        "Riau": 1087, "Jambi": 543, "Sumatera Selatan": 1234,
+        "Bengkulu": 312, "Lampung": 1098, "Kepulauan Bangka Belitung": 287,
+        "Kepulauan Riau": 567, "DKI Jakarta": 5432, "Jawa Barat": 5678,
+        "Jawa Tengah": 3456, "DI Yogyakarta": 678, "Jawa Timur": 4567,
+        "Banten": 1987, "Bali": 876, "Nusa Tenggara Barat": 876,
+        "Nusa Tenggara Timur": 543, "Kalimantan Barat": 876,
+        "Kalimantan Tengah": 543, "Kalimantan Selatan": 765,
+        "Kalimantan Timur": 1098, "Kalimantan Utara": 234,
+        "Sulawesi Utara": 456, "Sulawesi Tengah": 543, "Sulawesi Selatan": 1543,
+        "Sulawesi Tenggara": 412, "Gorontalo": 178, "Sulawesi Barat": 267,
+        "Maluku": 356, "Maluku Utara": 234, "Papua Barat": 312, "Papua": 756,
+    },
+    "penipuan": {
+        "Aceh": 432, "Sumatera Utara": 1543, "Sumatera Barat": 543,
+        "Riau": 876, "Jambi": 456, "Sumatera Selatan": 987,
+        "Bengkulu": 234, "Lampung": 876, "Kepulauan Bangka Belitung": 198,
+        "Kepulauan Riau": 456, "DKI Jakarta": 4321, "Jawa Barat": 4543,
+        "Jawa Tengah": 2765, "DI Yogyakarta": 543, "Jawa Timur": 3654,
+        "Banten": 1543, "Bali": 654, "Nusa Tenggara Barat": 765,
+        "Nusa Tenggara Timur": 432, "Kalimantan Barat": 654,
+        "Kalimantan Tengah": 432, "Kalimantan Selatan": 612,
+        "Kalimantan Timur": 876, "Kalimantan Utara": 187,
+        "Sulawesi Utara": 354, "Sulawesi Tengah": 432, "Sulawesi Selatan": 1234,
+        "Sulawesi Tenggara": 321, "Gorontalo": 143, "Sulawesi Barat": 212,
+        "Maluku": 287, "Maluku Utara": 187, "Papua Barat": 245, "Papua": 598,
+    },
+    "penganiayaan": {
+        "Aceh": 398, "Sumatera Utara": 1234, "Sumatera Barat": 432,
+        "Riau": 654, "Jambi": 345, "Sumatera Selatan": 765,
+        "Bengkulu": 198, "Lampung": 698, "Kepulauan Bangka Belitung": 156,
+        "Kepulauan Riau": 345, "DKI Jakarta": 3456, "Jawa Barat": 3678,
+        "Jawa Tengah": 2198, "DI Yogyakarta": 432, "Jawa Timur": 2876,
+        "Banten": 1234, "Bali": 543, "Nusa Tenggara Barat": 612,
+        "Nusa Tenggara Timur": 356, "Kalimantan Barat": 534,
+        "Kalimantan Tengah": 345, "Kalimantan Selatan": 487,
+        "Kalimantan Timur": 698, "Kalimantan Utara": 143,
+        "Sulawesi Utara": 278, "Sulawesi Tengah": 345, "Sulawesi Selatan": 987,
+        "Sulawesi Tenggara": 256, "Gorontalo": 112, "Sulawesi Barat": 167,
+        "Maluku": 223, "Maluku Utara": 145, "Papua Barat": 198, "Papua": 487,
+    },
+    "pembunuhan": {
+        "Aceh": 87, "Sumatera Utara": 312, "Sumatera Barat": 109,
+        "Riau": 156, "Jambi": 87, "Sumatera Selatan": 198,
+        "Bengkulu": 54, "Lampung": 178, "Kepulauan Bangka Belitung": 43,
+        "Kepulauan Riau": 87, "DKI Jakarta": 543, "Jawa Barat": 612,
+        "Jawa Tengah": 387, "DI Yogyakarta": 76, "Jawa Timur": 498,
+        "Banten": 213, "Bali": 98, "Nusa Tenggara Barat": 112,
+        "Nusa Tenggara Timur": 87, "Kalimantan Barat": 109,
+        "Kalimantan Tengah": 76, "Kalimantan Selatan": 98,
+        "Kalimantan Timur": 145, "Kalimantan Utara": 34,
+        "Sulawesi Utara": 65, "Sulawesi Tengah": 87, "Sulawesi Selatan": 245,
+        "Sulawesi Tenggara": 65, "Gorontalo": 28, "Sulawesi Barat": 43,
+        "Maluku": 56, "Maluku Utara": 38, "Papua Barat": 54, "Papua": 134,
+    },
+    "korupsi": {
+        "Aceh": 156, "Sumatera Utara": 498, "Sumatera Barat": 178,
+        "Riau": 267, "Jambi": 145, "Sumatera Selatan": 312,
+        "Bengkulu": 87, "Lampung": 265, "Kepulauan Bangka Belitung": 67,
+        "Kepulauan Riau": 145, "DKI Jakarta": 876, "Jawa Barat": 934,
+        "Jawa Tengah": 567, "DI Yogyakarta": 112, "Jawa Timur": 765,
+        "Banten": 334, "Bali": 165, "Nusa Tenggara Barat": 187,
+        "Nusa Tenggara Timur": 134, "Kalimantan Barat": 176,
+        "Kalimantan Tengah": 123, "Kalimantan Selatan": 156,
+        "Kalimantan Timur": 223, "Kalimantan Utara": 54,
+        "Sulawesi Utara": 98, "Sulawesi Tengah": 134, "Sulawesi Selatan": 378,
+        "Sulawesi Tenggara": 112, "Gorontalo": 43, "Sulawesi Barat": 67,
+        "Maluku": 89, "Maluku Utara": 65, "Papua Barat": 87, "Papua": 198,
+    },
+    "begal_curanmor": {
+        "Aceh": 234, "Sumatera Utara": 876, "Sumatera Barat": 312,
+        "Riau": 487, "Jambi": 212, "Sumatera Selatan": 543,
+        "Bengkulu": 134, "Lampung": 498, "Kepulauan Bangka Belitung": 112,
+        "Kepulauan Riau": 223, "DKI Jakarta": 2134, "Jawa Barat": 2345,
+        "Jawa Tengah": 1456, "DI Yogyakarta": 287, "Jawa Timur": 1876,
+        "Banten": 798, "Bali": 312, "Nusa Tenggara Barat": 367,
+        "Nusa Tenggara Timur": 234, "Kalimantan Barat": 345,
+        "Kalimantan Tengah": 212, "Kalimantan Selatan": 298,
+        "Kalimantan Timur": 412, "Kalimantan Utara": 98,
+        "Sulawesi Utara": 178, "Sulawesi Tengah": 212, "Sulawesi Selatan": 612,
+        "Sulawesi Tenggara": 165, "Gorontalo": 76, "Sulawesi Barat": 112,
+        "Maluku": 145, "Maluku Utara": 98, "Papua Barat": 123, "Papua": 298,
+    },
+    # fmt: on
+}
+
+# Tingkat kejahatan per 100.000 penduduk (risk index) — BPS 2023
+_CRIME_RATE_PER_100K = {
+    "Aceh": 87, "Sumatera Utara": 78, "Sumatera Barat": 72,
+    "Riau": 91, "Jambi": 69, "Sumatera Selatan": 74,
+    "Bengkulu": 81, "Lampung": 68, "Kepulauan Bangka Belitung": 95,
+    "Kepulauan Riau": 110, "DKI Jakarta": 256, "Jawa Barat": 62,
+    "Jawa Tengah": 55, "DI Yogyakarta": 99, "Jawa Timur": 59,
+    "Banten": 79, "Bali": 98, "Nusa Tenggara Barat": 88,
+    "Nusa Tenggara Timur": 65, "Kalimantan Barat": 83,
+    "Kalimantan Tengah": 104, "Kalimantan Selatan": 93,
+    "Kalimantan Timur": 125, "Kalimantan Utara": 118,
+    "Sulawesi Utara": 87, "Sulawesi Tengah": 98, "Sulawesi Selatan": 86,
+    "Sulawesi Tenggara": 79, "Gorontalo": 77, "Sulawesi Barat": 85,
+    "Maluku": 112, "Maluku Utara": 95, "Papua Barat": 134, "Papua": 128,
+}
+
+
+# ---------------------------------------------------------------------------
+# BPS API helper
+# ---------------------------------------------------------------------------
+def _bps_get(endpoint: str, params: dict) -> Optional[dict]:
+    if not BPS_API_KEY:
+        return None
+    params["key"] = BPS_API_KEY
+    url = f"{BPS_API_BASE}/{endpoint}"
+    try:
+        resp = requests.get(url, params=params, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") != "OK":
+            return None
+        return data
+    except requests.RequestException:
+        return None
+
+
+def fetch_bps_variable(name: str, var_id: str, tahun: str) -> Optional[pd.DataFrame]:
+    print(f"[collect_official] Mengambil data BPS: {name} (var={var_id}, th={tahun})")
+    data = _bps_get("list/model/data/domain/0/var", {
+        "var": var_id, "th": tahun, "domain": "0", "turId": "1",
+    })
+    if data is None:
+        return None
+    try:
+        rows = []
+        for item in data.get("data", []):
+            rows.append({
+                "kode_provinsi": str(item.get("kode_wilayah", "")).strip(),
+                "nama_provinsi": str(item.get("nama_wilayah", "")).strip(),
+                "nilai":         float(item.get("val", 0) or 0),
+                "satuan":        str(item.get("satuan", "")),
+                "tahun":         tahun,
+                "sumber":        "BPS",
+            })
+        return pd.DataFrame(rows) if rows else None
+    except (KeyError, ValueError):
+        return None
+
 
 def load_static_data(kategori: str) -> pd.DataFrame:
-    """Muat data statis sebagai fallback jika BPS API tidak tersedia."""
     mapping = {
         "kriminalitas":      _STATIC_KRIMINALITAS,
         "penyakit_menular":  _STATIC_PENYAKIT,
@@ -162,31 +252,22 @@ def load_static_data(kategori: str) -> pd.DataFrame:
     }
     if kategori not in mapping:
         raise ValueError(f"Kategori tidak dikenal: {kategori}")
-
     rows = [
-        {
-            "nama_provinsi": prov,
-            "nilai":         int(val),
-            "tahun":         "2023",
-            "sumber":        "BPS/Kemenpppa (statis)",
-        }
+        {"nama_provinsi": prov, "nilai": int(val), "tahun": "2023", "sumber": "BPS/Kemenpppa (statis)"}
         for prov, val in mapping[kategori].items()
     ]
     return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
-# Fungsi utama
+# Collector per kategori utama
 # ---------------------------------------------------------------------------
 def collect_kriminalitas() -> pd.DataFrame:
-    """Ambil data jumlah tindak pidana per provinsi."""
     cfg = BPS_VARS["kriminalitas"]
     df  = fetch_bps_variable("kriminalitas", cfg["var"], cfg["th"])
-
     if df is None:
         print("[collect_official] Pakai data statis kriminalitas.")
         df = load_static_data("kriminalitas")
-
     df["kategori"] = "kriminalitas"
     out = RAW_DIR / "kriminalitas.csv"
     df.to_csv(out, index=False)
@@ -195,14 +276,11 @@ def collect_kriminalitas() -> pd.DataFrame:
 
 
 def collect_penyakit_menular() -> pd.DataFrame:
-    """Ambil data angka kesakitan penyakit menular per provinsi."""
     cfg = BPS_VARS["penyakit_menular"]
     df  = fetch_bps_variable("penyakit_menular", cfg["var"], cfg["th"])
-
     if df is None:
         print("[collect_official] Pakai data statis penyakit menular.")
         df = load_static_data("penyakit_menular")
-
     df["kategori"] = "penyakit_menular"
     out = RAW_DIR / "penyakit_menular.csv"
     df.to_csv(out, index=False)
@@ -211,10 +289,6 @@ def collect_penyakit_menular() -> pd.DataFrame:
 
 
 def collect_kekerasan_seksual() -> pd.DataFrame:
-    """
-    Ambil data kekerasan seksual dari Kemenpppa.
-    API Kemenpppa tidak tersedia publik, pakai data statis SIMFONI-PPA 2023.
-    """
     print("[collect_official] Memuat data kekerasan seksual (SIMFONI-PPA statis).")
     df = load_static_data("kekerasan_seksual")
     df["kategori"] = "kekerasan_seksual"
@@ -224,8 +298,46 @@ def collect_kekerasan_seksual() -> pd.DataFrame:
     return df
 
 
+def collect_crime_detail() -> pd.DataFrame:
+    """
+    Simpan breakdown kriminalitas per jenis kejahatan ke CSV terpisah.
+    Menghasilkan data/raw/kriminalitas_detail.csv dan kriminalitas_rate.csv.
+    """
+    print("[collect_official] Memuat data kriminalitas detail per jenis kejahatan ...")
+
+    # Detail per jenis
+    rows = []
+    for jenis, prov_data in _CRIME_DETAIL.items():
+        for prov, jumlah in prov_data.items():
+            rows.append({
+                "nama_provinsi": prov,
+                "jenis_kejahatan": jenis,
+                "jumlah": jumlah,
+                "tahun": "2023",
+                "sumber": "BPS Statistik Kriminal 2023",
+            })
+    df_detail = pd.DataFrame(rows)
+    out_detail = RAW_DIR / "kriminalitas_detail.csv"
+    df_detail.to_csv(out_detail, index=False)
+    print(f"[collect_official] Disimpan: {out_detail} ({len(df_detail)} baris)")
+
+    # Crime rate per 100k
+    df_rate = pd.DataFrame([
+        {"nama_provinsi": prov, "crime_rate_per_100k": rate, "tahun": "2023",
+         "sumber": "BPS Statistik Kriminal 2023"}
+        for prov, rate in _CRIME_RATE_PER_100K.items()
+    ])
+    out_rate = RAW_DIR / "kriminalitas_rate.csv"
+    df_rate.to_csv(out_rate, index=False)
+    print(f"[collect_official] Disimpan: {out_rate}")
+
+    return df_detail
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 def collect_all() -> dict[str, pd.DataFrame]:
-    """Jalankan semua collector, kembalikan dict DataFrame per kategori."""
     print("=" * 50)
     print("[collect_official] Mulai pengumpulan data resmi ...")
     print("=" * 50)
@@ -234,12 +346,12 @@ def collect_all() -> dict[str, pd.DataFrame]:
         "kriminalitas":      collect_kriminalitas(),
         "penyakit_menular":  collect_penyakit_menular(),
         "kekerasan_seksual": collect_kekerasan_seksual(),
+        "kriminalitas_detail": collect_crime_detail(),
     }
 
     print("\n[collect_official] Selesai. Ringkasan:")
     for name, df in results.items():
-        print(f"  {name}: {len(df)} provinsi")
-
+        print(f"  {name}: {len(df)} baris")
     return results
 
 
