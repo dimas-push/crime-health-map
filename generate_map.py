@@ -3,6 +3,7 @@ Generate docs/index.html dengan UI cyberpunk dan peta Folium ter-embed.
 Usage: python generate_map.py
 """
 
+import sqlite3
 import sys
 import json
 from pathlib import Path
@@ -14,6 +15,59 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 from visualize import load_geodataframe, _ID_COLUMNS
+from process import process_all
+from collect_official import collect_all as collect_official_all
+from collect_news import collect_news
+from collect_social import collect_social
+from sentiment import run_sentiment_analysis
+
+DOCS_DIR      = Path(__file__).parent / "docs"
+PROCESSED_DIR = Path(__file__).parent / "data" / "processed"
+DB_PATH       = PROCESSED_DIR / "crime_health.db"
+DOCS_DIR.mkdir(exist_ok=True)
+
+
+def load_or_build_data() -> pd.DataFrame:
+    """
+    Load data dari SQLite jika sudah ada,
+    atau jalankan pipeline lengkap jika belum.
+    """
+    final_csv = PROCESSED_DIR / "final.csv"
+
+    if final_csv.exists():
+        print("[generate_map] Memuat data dari cache (final.csv) ...")
+        return pd.read_csv(final_csv)
+
+    print("[generate_map] Data belum ada, jalankan pipeline pengumpulan data ...")
+    collect_official_all()
+    collect_news()
+    collect_social()
+    df = process_all()
+    run_sentiment_analysis(use_model=False)
+    return df
+
+
+def load_sentiment_summary() -> dict:
+    """Ambil ringkasan sentimen dari SQLite untuk ditampilkan di UI."""
+    if not DB_PATH.exists():
+        return {}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                "SELECT kategori, sentimen, COUNT(*) as jumlah "
+                "FROM data_sentimen "
+                "WHERE kategori IS NOT NULL AND sentimen IS NOT NULL "
+                "GROUP BY kategori, sentimen",
+                conn,
+            )
+            result = {}
+            for kat, grp in df.groupby("kategori"):
+                result[kat] = grp.set_index("sentimen")["jumlah"].to_dict()
+            return result
+        except Exception:
+            return {}
+
 
 DOCS_DIR = Path(__file__).parent / "docs"
 DOCS_DIR.mkdir(exist_ok=True)
@@ -46,16 +100,28 @@ LAYERS = {
 # 1. Load data
 # ---------------------------------------------------------------------------
 print("Memuat GeoDataFrame provinsi ...")
-gdf = load_geodataframe("provinsi")
+gdf    = load_geodataframe("provinsi")
 id_col = _ID_COLUMNS["provinsi"]
 
-rng = np.random.default_rng(seed=42)
-data = pd.DataFrame({
-    "id_wilayah":        gdf[id_col],
-    "kriminalitas":      rng.integers(50,  800, size=len(gdf)),
-    "kekerasan_seksual": rng.integers(10,  300, size=len(gdf)),
-    "penyakit_menular":  rng.integers(20,  600, size=len(gdf)),
-})
+# Load data nyata dari pipeline; fallback dummy jika belum ada
+df_final = load_or_build_data()
+
+def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
+    sub = (
+        df[df["kategori"] == kategori]
+        .groupby("nama_provinsi")["jumlah_kasus"]
+        .sum()
+    )
+    return sub
+
+# Bangun tabel data sesuai nama provinsi di GeoDataFrame
+data = pd.DataFrame({"id_wilayah": gdf[id_col]})
+for kat in ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]:
+    pivot = _pivot(df_final, kat)
+    data[kat] = data["id_wilayah"].map(pivot).fillna(0).astype(int)
+
+sentimen_summary = load_sentiment_summary()
+IS_DUMMY = not (PROCESSED_DIR / "final.csv").exists()
 
 # ---------------------------------------------------------------------------
 # 2. Build satu peta Folium per layer dengan neon colormap
@@ -138,9 +204,12 @@ stats = {
     for key in LAYERS
 }
 
-maps_json  = json.dumps(maps)
-stats_json = json.dumps(stats)
-layers_json = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
+maps_json      = json.dumps(maps)
+stats_json     = json.dumps(stats)
+layers_json    = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
+sentimen_json  = json.dumps(sentimen_summary)
+data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
+data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
 
 # ---------------------------------------------------------------------------
 # 4. HTML Template
@@ -317,10 +386,18 @@ HTML = f"""<!DOCTYPE html>
 
   .warn {{
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    background: rgba(255,255,0,0.06); border: 1px solid rgba(255,255,0,0.3);
-    color: #ffff00; font-size: 0.6rem; letter-spacing: 2px;
+    font-size: 0.6rem; letter-spacing: 2px;
     padding: 3px 12px; z-index: 10; pointer-events: none; white-space: nowrap;
   }}
+  .warn-dummy {{ background: rgba(255,255,0,0.06); border: 1px solid rgba(255,255,0,0.3); color: #ffff00; }}
+  .warn-live  {{ background: rgba(0,255,65,0.06);  border: 1px solid rgba(0,255,65,0.3);  color: #00ff41; }}
+
+  /* Sentimen bar */
+  .sent-row {{ display:flex; align-items:center; gap:6px; margin-bottom:5px; font-size:0.67rem; }}
+  .sent-label {{ width:52px; color:rgba(255,255,255,0.4); }}
+  .sent-bar {{ flex:1; height:6px; background:#0d0d2a; border-radius:2px; overflow:hidden; }}
+  .sent-fill {{ height:100%; border-radius:2px; transition:width 0.4s; }}
+  .sent-count {{ width:24px; text-align:right; color:var(--neon); font-family:'Orbitron',sans-serif; font-size:0.62rem; }}
   .hud-br {{
     position: absolute; bottom: 16px; right: 16px;
     background: rgba(8,8,26,0.85); border: 1px solid var(--border);
@@ -339,7 +416,7 @@ HTML = f"""<!DOCTYPE html>
   <div class="hud-right">
     <span><span class="pulse"></span>SYSTEM ONLINE</span>
     <span>34 PROVINSI</span>
-    <span>DATA: DUMMY v0.1</span>
+    <span>{data_badge}</span>
     <span id="clk">--:--:--</span>
   </div>
 </header>
@@ -366,9 +443,18 @@ HTML = f"""<!DOCTYPE html>
     </table>
 
     <hr class="div"/>
-    <div class="sec" style="color:rgba(255,255,255,0.1)">// TAHUN 2024 · DUMMY DATA</div>
+    <div class="sec">// ANALISIS SENTIMEN</div>
+    <div id="sent-panel">
+      <div class="sent-row"><span class="sent-label">NEGATIF</span><div class="sent-bar"><div class="sent-fill" id="sent-neg" style="background:#ff4444;width:0%"></div></div><span class="sent-count" id="sent-neg-n">0</span></div>
+      <div class="sent-row"><span class="sent-label">NETRAL</span><div class="sent-bar"><div class="sent-fill" id="sent-net" style="background:#888888;width:0%"></div></div><span class="sent-count" id="sent-net-n">0</span></div>
+      <div class="sent-row"><span class="sent-label">POSITIF</span><div class="sent-bar"><div class="sent-fill" id="sent-pos" style="background:#00ff41;width:0%"></div></div><span class="sent-count" id="sent-pos-n">0</span></div>
+    </div>
+
+    <hr class="div"/>
+    <div class="sec" style="color:rgba(255,255,255,0.1)">// SUMBER: BPS · KEMENKES · SIMFONI-PPA</div>
     <div style="font-size:0.58rem;color:rgba(255,255,255,0.15);line-height:1.7;padding:2px 4px">
-      Integrasi BPS / Kemenkes / Kemenpppa<br/>sedang dikembangkan.
+      Berita: CNN Indonesia · Antara<br/>
+      Sosmed: Twitter/X (sampel)
     </div>
   </aside>
 
@@ -377,36 +463,48 @@ HTML = f"""<!DOCTYPE html>
     <div class="c c-tr"></div>
     <div class="c c-bl"></div>
     <div class="c c-br"></div>
-    <div class="warn">&#9888; DATA DUMMY — BUKAN DATA RESMI</div>
+    <div class="warn {data_badge_cls}">&#9888; {data_badge}</div>
     <iframe id="map-frame" src="about:blank"></iframe>
     <div class="hud-br">WGS84 · EPSG:4326 · &copy; NEXUS MAP SYS</div>
   </div>
 </div>
 
 <script>
-const MAPS   = {maps_json};
-const STATS  = {stats_json};
-const LAYERS = {layers_json};
-let blobUrl  = null;
+const MAPS     = {maps_json};
+const STATS    = {stats_json};
+const LAYERS   = {layers_json};
+const SENTIMEN = {sentimen_json};
+let blobUrl    = null;
+
+function updateSentimen(key) {{
+  const s   = SENTIMEN[key] || {{}};
+  const neg = s['negatif'] || 0;
+  const net = s['netral']  || 0;
+  const pos = s['positif'] || 0;
+  const total = neg + net + pos || 1;
+
+  document.getElementById('sent-neg').style.width   = (neg/total*100) + '%';
+  document.getElementById('sent-net').style.width   = (net/total*100) + '%';
+  document.getElementById('sent-pos').style.width   = (pos/total*100) + '%';
+  document.getElementById('sent-neg-n').textContent = neg;
+  document.getElementById('sent-net-n').textContent = net;
+  document.getElementById('sent-pos-n').textContent = pos;
+}}
 
 function switchLayer(key, btn) {{
   const neon = LAYERS[key].neon;
 
-  // Update CSS variable global
   document.documentElement.style.setProperty('--neon', neon);
 
-  // Update tombol aktif
   document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
-  // Update stat values
   const s = STATS[key];
   document.getElementById('s-total').textContent = s.total.toLocaleString('id-ID');
   document.getElementById('s-avg').textContent   = s.avg.toLocaleString('id-ID');
   document.getElementById('s-max').textContent   = s.max.toLocaleString('id-ID');
   document.getElementById('s-min').textContent   = s.min.toLocaleString('id-ID');
 
-  // Update top 5
   document.getElementById('top-body').innerHTML = s.top.map(([w, k], i) =>
     `<tr>
       <td><span class="rank">${{i+1}}.</span></td>
@@ -415,19 +513,18 @@ function switchLayer(key, btn) {{
     </tr>`
   ).join('');
 
-  // Ganti iframe
+  updateSentimen(key);
+
   if (blobUrl) URL.revokeObjectURL(blobUrl);
   blobUrl = URL.createObjectURL(new Blob([MAPS[key]], {{type:'text/html'}}));
   document.getElementById('map-frame').src = blobUrl;
 }}
 
-// Jam realtime
 setInterval(() => {{
   document.getElementById('clk').textContent =
     new Date().toLocaleTimeString('id-ID', {{hour12:false}});
 }}, 1000);
 
-// Init layer pertama
 document.addEventListener('DOMContentLoaded', () => {{
   const firstBtn = document.querySelector('.layer-btn');
   switchLayer(firstBtn.dataset.key, firstBtn);
