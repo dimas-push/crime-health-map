@@ -29,13 +29,26 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 # RSS feed publik
 # ---------------------------------------------------------------------------
 RSS_FEEDS = {
-    "cnnindonesia_nasional":  "https://www.cnnindonesia.com/nasional/rss",
-    "cnnindonesia_gaya":      "https://www.cnnindonesia.com/gaya-hidup/rss",
-    "cnnindonesia_regional":  "https://www.cnnindonesia.com/regional/rss",
-    "antaranews_hukum":       "https://www.antaranews.com/rss/hukum",
-    "antaranews_nusantara":   "https://www.antaranews.com/rss/nusantara",
-    "republika_nasional":     "https://www.republika.co.id/rss/nasional",
-    "republika_peristiwa":    "https://www.republika.co.id/rss/nasional/peristiwa",
+    # CNN Indonesia
+    "cnnindonesia_nasional":   "https://www.cnnindonesia.com/nasional/rss",
+    "cnnindonesia_gaya":       "https://www.cnnindonesia.com/gaya-hidup/rss",
+    # Tempo
+    "tempo_nasional":          "https://rss.tempo.co/nasional",
+    "tempo_hukum":             "https://rss.tempo.co/hukum",
+    "tempo_metro":             "https://rss.tempo.co/metro",
+    # Jawa Pos
+    "jawapos_nasional":        "https://www.jawapos.com/rss/nasional",
+    "jawapos_metro":           "https://www.jawapos.com/rss/metro",
+    # Antara News
+    "antaranews_hukum":        "https://www.antaranews.com/rss/hukum",
+    "antaranews_humaniora":    "https://www.antaranews.com/rss/humaniora",
+    "antaranews_nusantara":    "https://www.antaranews.com/rss/nusantara",
+    # Republika
+    "republika_nasional":      "https://www.republika.co.id/rss/nasional",
+    # Media Indonesia
+    "media_indonesia":         "https://mediaindonesia.com/rss",
+    # CNBC Indonesia (isu korupsi, kebijakan)
+    "cnbcindonesia_news":      "https://www.cnbcindonesia.com/rss",
 }
 
 # ---------------------------------------------------------------------------
