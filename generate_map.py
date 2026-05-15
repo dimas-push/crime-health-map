@@ -257,61 +257,61 @@ def make_map(key: str) -> str:
         ),
     ).add_to(m)
 
-    # ── Marker kejadian dari berita (per kategori) ──
-    if not df_articles.empty:
-        df_kat = df_articles[df_articles["kategori"] == key].copy()
-        for _, row in df_kat.iterrows():
-            try:
-                lat, lon = float(row["lat"]), float(row["lon"])
-            except (ValueError, TypeError):
-                continue
+    # Marker tidak di-embed statis — dikirim via postMessage dari parent
+    # agar bisa difilter per rentang waktu tanpa regenerasi peta
 
-            kab   = str(row.get("kabupaten") or "")
-            judul = str(row.get("judul") or "")[:120]
-            desk  = str(row.get("deskripsi") or "")[:200]
-            url   = str(row.get("url") or "#")
-            tgl   = str(row.get("tanggal") or "")[:16]
-            src   = str(row.get("sumber") or "")
+    # Inject script penerima postMessage untuk marker dinamis
+    marker_receiver = """
+<script>
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ADD_MARKERS') return;
+  var markers = e.data.markers || [];
+  var neon = e.data.neon || '#00ffff';
+  // Cari map Leaflet yang sudah ada
+  var maps = Object.values(window).filter(function(v){
+    return v && typeof v === 'object' && v._leaflet_id;
+  });
+  var lmap = null;
+  document.querySelectorAll('.folium-map').forEach(function(el){
+    if (el._leaflet_id) lmap = window[Object.keys(window).find(k => window[k] === el)];
+  });
+  // Fallback: ambil dari variabel global Leaflet
+  if (!lmap) {
+    for (var k in window) {
+      try {
+        if (window[k] && window[k]._leaflet_id && window[k].getCenter) { lmap = window[k]; break; }
+      } catch(err){}
+    }
+  }
+  if (!lmap) return;
+  // Hapus layer marker lama
+  if (window._markerLayer) { window._markerLayer.clearLayers(); }
+  else { window._markerLayer = L.layerGroup().addTo(lmap); }
 
-            popup_html = f"""
-            <div style="
-              background:#0a0a1f;color:{neon};
-              font-family:'Share Tech Mono',monospace;
-              font-size:12px;border:1px solid {neon};
-              padding:10px;max-width:280px;
-              box-shadow:0 0 12px {neon}55;
-            ">
-              <div style="font-weight:bold;font-size:13px;margin-bottom:6px;
-                color:#ffffff;border-bottom:1px solid {neon}44;padding-bottom:4px;">
-                {judul}
-              </div>
-              <div style="color:{neon}99;font-size:11px;margin-bottom:6px;">
-                {desk}
-              </div>
-              <div style="font-size:10px;color:{neon}66;margin-bottom:8px;">
-                {tgl} &nbsp;|&nbsp; {src}
-                {'&nbsp;|&nbsp;' + kab if kab else ''}
-              </div>
-              <a href="{url}" target="_blank"
-                 style="color:{neon};text-decoration:none;font-size:11px;
-                   border:1px solid {neon};padding:2px 8px;">
-                BACA SELENGKAPNYA &rarr;
-              </a>
-            </div>"""
-
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=7,
-                color=neon,
-                fill=True,
-                fill_color=neon,
-                fill_opacity=0.85,
-                weight=2,
-                popup=folium.Popup(popup_html, max_width=300),
-                tooltip=f"{judul[:60]}..." if len(judul) > 60 else judul,
-            ).add_to(m)
-
-    return m._repr_html_()
+  markers.forEach(function(a) {
+    var circle = L.circleMarker([a.lat, a.lon], {
+      radius: 7, color: neon, fillColor: neon,
+      fillOpacity: 0.85, weight: 2
+    });
+    var popup = '<div style="background:#0a0a1f;color:' + neon + ';' +
+      'font-family:monospace;font-size:12px;border:1px solid ' + neon + ';' +
+      'padding:10px;max-width:280px;box-shadow:0 0 12px ' + neon + '55;">' +
+      '<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;' +
+      'border-bottom:1px solid ' + neon + '44;padding-bottom:4px;">' + a.judul + '</div>' +
+      '<div style="color:' + neon + '99;font-size:11px;margin-bottom:6px;">' + a.desk + '</div>' +
+      '<div style="font-size:10px;color:' + neon + '66;margin-bottom:8px;">' +
+      a.tgl + (a.src ? ' | ' + a.src : '') + (a.kab ? ' | ' + a.kab : '') + '</div>' +
+      '<a href="' + a.url + '" target="_blank" style="color:' + neon + ';' +
+      'text-decoration:none;font-size:11px;border:1px solid ' + neon + ';padding:2px 8px;">' +
+      'BACA SELENGKAPNYA &rarr;</a></div>';
+    circle.bindPopup(popup, {maxWidth: 300});
+    circle.bindTooltip(a.judul.slice(0,60) + (a.judul.length>60?'...':''));
+    window._markerLayer.addLayer(circle);
+  });
+});
+</script>"""
+    html = m._repr_html_()
+    return html.replace("</body>", marker_receiver + "</body>")
 
 
 maps = {key: make_map(key) for key in LAYERS}
@@ -434,9 +434,23 @@ try:
     _news_ts = str(_df_ts["scraped_at"].max()) if "scraped_at" in _df_ts.columns else ""
 except Exception:
     pass
-scraped_at_iso = _news_ts  # format: "2026-05-15T21:20:40.520807"
+scraped_at_iso = _news_ts
 total_articles = len(df_articles) if not df_articles.empty else 0
 total_markers  = sum(stats[k]["markers"] for k in LAYERS)
+
+# Serialize artikel ke JSON untuk filter waktu di JS
+def _articles_to_json() -> str:
+    if df_articles.empty:
+        return "[]"
+    cols = ["judul", "deskripsi", "url", "tanggal", "sumber", "kategori",
+            "provinsi", "kabupaten", "lat", "lon"]
+    existing = [c for c in cols if c in df_articles.columns]
+    return df_articles[existing].to_json(orient="records", force_ascii=False)
+
+articles_json = _articles_to_json()
+
+# Neon per kategori (untuk marker warna)
+_NEON_MAP = {k: v["neon"] for k, v in LAYERS.items()}
 
 # ---------------------------------------------------------------------------
 # 4. HTML Template
@@ -632,6 +646,26 @@ HTML = f"""<!DOCTYPE html>
     padding: 5px 12px; z-index: 10; pointer-events: none;
     backdrop-filter: blur(4px);
   }}
+
+  /* Filter waktu */
+  .tf-btn {{
+    padding: 4px 8px; font-family: 'Share Tech Mono', monospace;
+    font-size: 0.63rem; letter-spacing: 1px; cursor: pointer;
+    background: transparent; border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.35); transition: all 0.2s;
+  }}
+  .tf-btn.active, .tf-btn:hover {{
+    background: color-mix(in srgb, var(--neon) 12%, transparent);
+    border-color: var(--neon); color: var(--neon);
+  }}
+
+  /* Mobile responsive */
+  @media (max-width: 700px) {{
+    aside {{ width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--border); }}
+    .main {{ flex-direction: column; }}
+    .logo em {{ display: none; }}
+    .hud-right span:nth-child(2) {{ display: none; }}
+  }}
 </style>
 </head>
 <body>
@@ -728,11 +762,20 @@ HTML = f"""<!DOCTYPE html>
       <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--neon)" opacity="0.85"/></svg>
       <span style="font-size:0.7rem;color:rgba(255,255,255,0.5)">
         <span id="marker-count" style="color:var(--neon);font-family:'Orbitron',sans-serif;font-size:0.75rem">0</span>
-        &nbsp;kejadian terdeteksi dari berita
+        &nbsp;kejadian terdeteksi
       </span>
     </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">
+      Filter rentang waktu:
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;padding:0 2px 6px;">
+      <button class="tf-btn active" data-days="7"   onclick="setTimeFilter(7,this)">7H</button>
+      <button class="tf-btn"        data-days="30"  onclick="setTimeFilter(30,this)">30H</button>
+      <button class="tf-btn"        data-days="90"  onclick="setTimeFilter(90,this)">90H</button>
+      <button class="tf-btn"        data-days="0"   onclick="setTimeFilter(0,this)">SEMUA</button>
+    </div>
     <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 6px;">
-      Klik titik di peta untuk lihat detail berita
+      Klik titik di peta untuk detail berita
     </div>
 
     <hr class="div"/>
@@ -770,6 +813,8 @@ const STATS      = {stats_json};
 const NEWS_STATS = {news_stats_json};
 const LAYERS     = {layers_json};
 const SENTIMEN   = {sentimen_json};
+const ARTICLES   = {articles_json};
+const NEON_MAP   = {json.dumps(_NEON_MAP)};
 let blobUrl    = null;
 let currentLayer = 'kriminalitas';
 
@@ -937,9 +982,115 @@ function updateSystemStatus() {{
 updateSystemStatus();
 setInterval(updateSystemStatus, 60000);
 
+// ── Filter waktu & rebuild peta dengan marker ──
+let currentDays = 7;
+let currentKey  = 'kriminalitas';
+
+function parseArticleDate(tanggal) {{
+  if (!tanggal) return null;
+  // Format RSS: "Thu, 15 May 2026 14:00:00 +0700" atau ISO
+  try {{ return new Date(tanggal); }} catch(e) {{ return null; }}
+}}
+
+function buildMapWithFilter(key, days) {{
+  const neon     = LAYERS[key] ? LAYERS[key].neon : NEON_MAP[key] || '#00ffff';
+  const cutoff   = days > 0 ? new Date(Date.now() - days * 86400000) : null;
+  const filtered = ARTICLES.filter(a => {{
+    if (a.kategori !== key) return false;
+    if (!a.lat || !a.lon)  return false;
+    if (cutoff) {{
+      const d = parseArticleDate(a.tanggal);
+      if (d && d < cutoff) return false;
+    }}
+    return true;
+  }});
+
+  document.getElementById('marker-count').textContent =
+    filtered.length.toLocaleString('id-ID');
+
+  // Bangun iframe HTML baru dengan marker yang sudah difilter
+  const baseHtml = MAPS[key];
+  if (!baseHtml) return;
+
+  // Inject marker ke dalam iframe map dengan postMessage
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrl = URL.createObjectURL(new Blob([baseHtml], {{type:'text/html'}}));
+  const frame = document.getElementById('map-frame');
+  frame.src = blobUrl;
+
+  // Setelah iframe load, kirim data marker via postMessage
+  frame.onload = () => {{
+    const markerData = filtered.map(a => ({{
+      lat: a.lat, lon: a.lon,
+      judul: a.judul || '', desk: (a.deskripsi || '').slice(0,200),
+      url: a.url || '#', tgl: (a.tanggal || '').slice(0,16),
+      src: a.sumber || '', kab: a.kabupaten || '',
+      neon: neon,
+    }}));
+    frame.contentWindow.postMessage({{type:'ADD_MARKERS', markers: markerData, neon}}, '*');
+  }};
+}}
+
+function setTimeFilter(days, btn) {{
+  document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentDays = days;
+  buildMapWithFilter(currentKey, days);
+}}
+
+// Override loadMap agar selalu pakai filter aktif
+const _origLoadMap = loadMap;
+function loadMap(html) {{
+  // Tidak dipakai langsung lagi — pakai buildMapWithFilter
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrl = URL.createObjectURL(new Blob([html], {{type:'text/html'}}));
+  document.getElementById('map-frame').src = blobUrl;
+}}
+
+// Override switchLayer untuk pakai buildMapWithFilter
+const _origSwitchLayer = switchLayer;
+function switchLayer(key, btn) {{
+  currentKey = key;
+  const neon = LAYERS[key] ? LAYERS[key].neon : '#00ffff';
+  document.documentElement.style.setProperty('--neon', neon);
+  document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const crimePanel = document.getElementById('crime-type-panel');
+  if (crimePanel) crimePanel.style.display = key === 'kriminalitas' ? 'block' : 'none';
+
+  const s = STATS[key];
+  updateStats(s, neon, key);
+  updateSentimen(key);
+
+  const mc = document.getElementById('marker-count');
+  if (mc) mc.textContent = (s.markers || 0).toLocaleString('id-ID');
+
+  buildMapWithFilter(key, currentDays);
+
+  if (key === 'kriminalitas') {{
+    const firstCrimeBtn = document.querySelector('.crime-btn');
+    if (firstCrimeBtn) {{
+      firstCrimeBtn.style.background = `color-mix(in srgb,${{neon}} 8%,transparent)`;
+      firstCrimeBtn.style.borderColor = neon;
+      firstCrimeBtn.style.color = neon;
+    }}
+    document.querySelectorAll('.crime-btn:not(:first-child)').forEach(b => {{
+      b.style.background = 'transparent';
+      b.style.borderColor = 'rgba(255,255,255,0.07)';
+      b.style.color = 'rgba(255,255,255,0.4)';
+    }});
+  }}
+}}
+
+// Listener postMessage dari iframe — marker injection
+window.addEventListener('message', (e) => {{
+  // iframe mengirim balik sinyal "ready" — tidak dipakai saat ini
+}});
+
 document.addEventListener('DOMContentLoaded', () => {{
   const firstBtn = document.querySelector('.layer-btn');
-  switchLayer(firstBtn.dataset.key, firstBtn);
+  if (firstBtn) switchLayer(firstBtn.dataset.key, firstBtn);
   updateSystemStatus();
 }});
 </script>
