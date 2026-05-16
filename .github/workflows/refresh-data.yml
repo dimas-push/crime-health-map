@@ -1,0 +1,67 @@
+name: Refresh Data & Regenerate Map
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # setiap 6 jam
+  workflow_dispatch:          # bisa trigger manual dari GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download Indonesia GeoJSON (if missing)
+        run: |
+          mkdir -p data/geojson
+          if [ ! -f data/geojson/indonesia_provinces.geojson ]; then
+            curl -L -o data/geojson/indonesia_provinces.geojson \
+              "https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia-province-simple.json"
+          fi
+
+      - name: Run pipeline (collect + process + generate map)
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          # Hapus cache agar data di-refresh
+          rm -f data/processed/final.csv
+          python -c "
+          import sys; sys.path.insert(0,'src')
+          from collect_news import collect_news
+          from collect_official import collect_all as collect_official_all
+          from collect_social import collect_social
+          from process import process_all
+          from sentiment import run_sentiment_analysis
+          collect_official_all()
+          collect_news()
+          collect_social()
+          process_all()
+          run_sentiment_analysis(use_model=False)
+          "
+          python generate_map.py
+
+      - name: Commit & push jika ada perubahan
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ data/raw/news.csv data/raw/social.csv || true
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan, skip commit."
+          else
+            git commit -m "chore: auto-refresh data $(date -u '+%Y-%m-%d %H:%M') UTC"
+            git push
+          fi

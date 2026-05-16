@@ -50,8 +50,14 @@ def load_crime_detail() -> pd.DataFrame:
         return pd.DataFrame()
     with sqlite3.connect(DB_PATH) as conn:
         try:
+            # Kolom bisa bernama 'jumlah' atau 'jumlah_kasus' tergantung pipeline
+            cols = [r[1] for r in conn.execute(
+                "PRAGMA table_info(kriminalitas_detail)"
+            ).fetchall()]
+            val_col = "jumlah_kasus" if "jumlah_kasus" in cols else "jumlah"
             return pd.read_sql(
-                "SELECT nama_provinsi, jenis_kejahatan, jumlah_kasus FROM kriminalitas_detail",
+                f"SELECT nama_provinsi, jenis_kejahatan, {val_col} as jumlah_kasus "
+                "FROM kriminalitas_detail",
                 conn,
             )
         except Exception:
@@ -231,9 +237,12 @@ def _articles_for(kategori: str) -> list[dict]:
     return sub[existing].to_dict(orient="records")
 
 
-def _inject_markers(html: str, articles: list[dict], neon: str) -> str:
+def _inject_markers(html: str, articles: list[dict], neon: str,
+                    colors: list[str] | None = None,
+                    vmin: float = 0, vmax: float = 100,
+                    label: str = "Kasus") -> str:
     """
-    Inject script marker ke dalam Folium HTML standalone.
+    Inject script marker + legend ke dalam Folium HTML standalone.
     Script menerima postMessage {days: N} dari parent untuk filter waktu.
     """
     arts_json = json.dumps(articles, ensure_ascii=False).replace('</', r'<\/')
@@ -299,6 +308,24 @@ def _inject_markers(html: str, articles: list[dict], neon: str) -> str:
         "try{window.parent.postMessage({type:'markerCount',count:count},'*');}catch(e){}"
         '}'
 
+        # Attach click handler ke GeoJSON layer untuk kirim data provinsi ke parent
+        'function _attachProvinsiClick(){'
+        'var m=_getMap();'
+        'if(!m){setTimeout(_attachProvinsiClick,300);return;}'
+        'try{'
+        'm.eachLayer(function(layer){'
+        'if(layer.eachLayer){layer.eachLayer(function(sub){'
+        'if(sub.feature){sub.on("click",function(e){'
+        'var p=e.target.feature.properties||{};'
+        'var prov=p.PROVINSI||p.WADMPR||p.NAME_1||p.name||"";'
+        'var arts=ARTS.filter(function(a){return a.provinsi&&a.provinsi===prov;});'
+        "try{window.parent.postMessage({type:'provinsiClick',provinsi:prov,articles:arts},'*');}catch(ex){}"
+        '});}'
+        '});}'
+        '});'
+        '}catch(ex){}}'
+        '_attachProvinsiClick();'
+
         'window.addEventListener("message",function(e){'
         'if(e.data&&typeof e.data.days==="number")buildMarkers(e.data.days);});'
 
@@ -306,8 +333,29 @@ def _inject_markers(html: str, articles: list[dict], neon: str) -> str:
         '})();'
     )
 
+    # Legend HTML
+    if colors:
+        grad = ', '.join(colors)
+        legend_html = (
+            f'<div style="position:fixed;bottom:28px;right:12px;z-index:9999;'
+            f'background:rgba(8,8,26,0.88);border:1px solid {neon};padding:8px 12px;'
+            f'font-family:monospace;font-size:11px;color:{neon};backdrop-filter:blur(4px);">'
+            f'<div style="margin-bottom:4px;letter-spacing:2px;font-size:10px;'
+            f'color:rgba(255,255,255,0.4);">{label.upper()}</div>'
+            f'<div style="display:flex;align-items:center;gap:6px;">'
+            f'<span style="font-size:10px;color:rgba(255,255,255,0.35);">'
+            f'{int(vmin):,}</span>'
+            f'<div style="width:80px;height:8px;background:linear-gradient(to right,{grad});'
+            f'border-radius:2px;"></div>'
+            f'<span style="font-size:10px;color:rgba(255,255,255,0.35);">'
+            f'{int(vmax):,}</span>'
+            f'</div></div>'
+        )
+    else:
+        legend_html = ''
+
     tag = '<scr' + 'ipt>' + script + '</' + 'scr' + 'ipt>'
-    return html.replace('</body>', tag + '</body>', 1)
+    return html.replace('</body>', legend_html + tag + '</body>', 1)
 
 
 def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
@@ -357,7 +405,10 @@ def make_map(key: str) -> None:
 
     m = _make_folium_map(neon, geojson_data, key, colormap)
     html = m.get_root().render()
-    html = _inject_markers(html, _articles_for(key), neon)
+    html = _inject_markers(html, _articles_for(key), neon,
+                           colors=cfg["colors"],
+                           vmin=float(values.min()), vmax=float(values.max()),
+                           label="Kasus")
     (MAPS_DIR / f"{key}.html").write_text(html, encoding="utf-8")
     print(f"  [map] {key}.html disimpan ({len(html)//1024} KB)")
 
@@ -396,8 +447,12 @@ def make_crime_type_map(jenis: str) -> None:
 
     m = _make_folium_map(neon, geojson_data, jenis, colormap)
     html = m.get_root().render()
-    # Crime type maps tidak punya marker artikel
-    html = _inject_markers(html, [], neon)
+    crime_colors = ["#0a0a1f", "#1a0800", "#551500", "#aa3300", neon]
+    html = _inject_markers(html, [], neon,
+                           colors=crime_colors,
+                           vmin=float(col_data[jenis].min()),
+                           vmax=float(max(col_data[jenis].max(), 1)),
+                           label=cfg["label"])
     dest.write_text(html, encoding="utf-8")
     print(f"  [map] crime_{jenis}.html disimpan ({len(html)//1024} KB)")
 
@@ -612,11 +667,59 @@ HTML = f"""<!DOCTYPE html>
     background: color-mix(in srgb, var(--neon) 12%, transparent);
     border-color: var(--neon); color: var(--neon);
   }}
+  /* Panel detail artikel */
+  #art-panel {{
+    position: fixed; top: 0; right: -360px; width: 340px; height: 100vh;
+    background: var(--panel); border-left: 1px solid var(--neon);
+    box-shadow: -4px 0 24px color-mix(in srgb, var(--neon) 20%, transparent);
+    z-index: 1000; display: flex; flex-direction: column;
+    transition: right 0.3s ease, border-color 0.4s, box-shadow 0.4s;
+    overflow: hidden;
+  }}
+  #art-panel.open {{ right: 0; }}
+  #art-panel-header {{
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+  }}
+  #art-panel-title {{
+    font-family: 'Orbitron', sans-serif; font-size: 0.75rem; font-weight: 700;
+    color: var(--neon); letter-spacing: 2px;
+  }}
+  #art-panel-close {{
+    background: transparent; border: 1px solid var(--border); color: var(--dim);
+    font-size: 0.75rem; cursor: pointer; padding: 2px 8px; font-family: 'Share Tech Mono', monospace;
+    transition: all 0.2s;
+  }}
+  #art-panel-close:hover {{ border-color: var(--neon); color: var(--neon); }}
+  #art-panel-list {{
+    flex: 1; overflow-y: auto; padding: 10px;
+  }}
+  #art-panel-list::-webkit-scrollbar {{ width: 3px; }}
+  #art-panel-list::-webkit-scrollbar-thumb {{ background: var(--neon); border-radius: 2px; }}
+  .art-item {{
+    border: 1px solid var(--border); padding: 10px; margin-bottom: 8px;
+    transition: border-color 0.2s;
+  }}
+  .art-item:hover {{ border-color: var(--neon); }}
+  .art-item-title {{
+    font-size: 0.72rem; color: rgba(255,255,255,0.8); margin-bottom: 5px; line-height: 1.4;
+  }}
+  .art-item-meta {{
+    font-size: 0.6rem; color: rgba(255,255,255,0.3); margin-bottom: 6px;
+  }}
+  .art-item-link {{
+    font-size: 0.62rem; color: var(--neon); text-decoration: none;
+    border: 1px solid var(--neon); padding: 2px 8px; display: inline-block;
+    transition: background 0.2s;
+  }}
+  .art-item-link:hover {{ background: color-mix(in srgb, var(--neon) 12%, transparent); }}
   @media (max-width: 700px) {{
     aside {{ width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--border); }}
     .main {{ flex-direction: column; }}
     .logo em {{ display: none; }}
     .hud-right span:nth-child(2) {{ display: none; }}
+    #art-panel {{ width: 100%; right: -100%; top: auto; bottom: -100%; height: 60vh; border-left: none; border-top: 1px solid var(--neon); }}
+    #art-panel.open {{ right: 0; bottom: 0; }}
   }}
 </style>
 </head>
@@ -742,6 +845,19 @@ HTML = f"""<!DOCTYPE html>
   </div>
 </div>
 
+<!-- Panel detail artikel per provinsi -->
+<div id="art-panel">
+  <div id="art-panel-header">
+    <span id="art-panel-title">ARTIKEL</span>
+    <button id="art-panel-close" onclick="closeArtPanel()">&#10005; TUTUP</button>
+  </div>
+  <div id="art-panel-list">
+    <div style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:20px 0;text-align:center;">
+      Klik provinsi di peta untuk melihat berita terkait
+    </div>
+  </div>
+</div>
+
 <script>
 const CRIME_TYPE_STATS = {crime_type_stats_json};
 const STATS      = {stats_json};
@@ -753,13 +869,42 @@ const ARTICLES   = {articles_json};
 let currentKey  = 'kriminalitas';
 let currentDays = 0;
 
-// Terima markerCount dari iframe
+// Terima pesan dari iframe
 window.addEventListener('message', function(e) {{
-  if (e.data && e.data.type === 'markerCount') {{
+  if (!e.data) return;
+  if (e.data.type === 'markerCount') {{
     document.getElementById('marker-count').textContent =
       Number(e.data.count).toLocaleString('id-ID');
   }}
+  if (e.data.type === 'provinsiClick') {{
+    openArtPanel(e.data.provinsi, e.data.articles || []);
+  }}
 }});
+
+function openArtPanel(provinsi, arts) {{
+  const panel = document.getElementById('art-panel');
+  const title = document.getElementById('art-panel-title');
+  const list  = document.getElementById('art-panel-list');
+  title.textContent = provinsi ? provinsi.toUpperCase() : 'ARTIKEL';
+  if (!arts || arts.length === 0) {{
+    list.innerHTML = '<div style="color:rgba(255,255,255,0.25);font-size:0.65rem;padding:20px 0;text-align:center;">Tidak ada artikel terdeteksi untuk provinsi ini</div>';
+  }} else {{
+    list.innerHTML = arts.slice(0,30).map(a => {{
+      const meta = [a.tanggal ? a.tanggal.slice(0,10) : '', a.sumber || '', a.kabupaten || '']
+        .filter(Boolean).join(' · ');
+      return `<div class="art-item">
+        <div class="art-item-title">${{String(a.judul||'').slice(0,120)}}</div>
+        <div class="art-item-meta">${{meta}}</div>
+        ${{a.url ? `<a class="art-item-link" href="${{a.url}}" target="_blank">BACA &#8594;</a>` : ''}}
+      </div>`;
+    }}).join('');
+  }}
+  panel.classList.add('open');
+}}
+
+function closeArtPanel() {{
+  document.getElementById('art-panel').classList.remove('open');
+}}
 
 function _sendFilter(days) {{
   try {{

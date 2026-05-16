@@ -132,11 +132,59 @@
     background: color-mix(in srgb, var(--neon) 12%, transparent);
     border-color: var(--neon); color: var(--neon);
   }
+  /* Panel detail artikel */
+  #art-panel {
+    position: fixed; top: 0; right: -360px; width: 340px; height: 100vh;
+    background: var(--panel); border-left: 1px solid var(--neon);
+    box-shadow: -4px 0 24px color-mix(in srgb, var(--neon) 20%, transparent);
+    z-index: 1000; display: flex; flex-direction: column;
+    transition: right 0.3s ease, border-color 0.4s, box-shadow 0.4s;
+    overflow: hidden;
+  }
+  #art-panel.open { right: 0; }
+  #art-panel-header {
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+  }
+  #art-panel-title {
+    font-family: 'Orbitron', sans-serif; font-size: 0.75rem; font-weight: 700;
+    color: var(--neon); letter-spacing: 2px;
+  }
+  #art-panel-close {
+    background: transparent; border: 1px solid var(--border); color: var(--dim);
+    font-size: 0.75rem; cursor: pointer; padding: 2px 8px; font-family: 'Share Tech Mono', monospace;
+    transition: all 0.2s;
+  }
+  #art-panel-close:hover { border-color: var(--neon); color: var(--neon); }
+  #art-panel-list {
+    flex: 1; overflow-y: auto; padding: 10px;
+  }
+  #art-panel-list::-webkit-scrollbar { width: 3px; }
+  #art-panel-list::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 2px; }
+  .art-item {
+    border: 1px solid var(--border); padding: 10px; margin-bottom: 8px;
+    transition: border-color 0.2s;
+  }
+  .art-item:hover { border-color: var(--neon); }
+  .art-item-title {
+    font-size: 0.72rem; color: rgba(255,255,255,0.8); margin-bottom: 5px; line-height: 1.4;
+  }
+  .art-item-meta {
+    font-size: 0.6rem; color: rgba(255,255,255,0.3); margin-bottom: 6px;
+  }
+  .art-item-link {
+    font-size: 0.62rem; color: var(--neon); text-decoration: none;
+    border: 1px solid var(--neon); padding: 2px 8px; display: inline-block;
+    transition: background 0.2s;
+  }
+  .art-item-link:hover { background: color-mix(in srgb, var(--neon) 12%, transparent); }
   @media (max-width: 700px) {
     aside { width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--border); }
     .main { flex-direction: column; }
     .logo em { display: none; }
     .hud-right span:nth-child(2) { display: none; }
+    #art-panel { width: 100%; right: -100%; top: auto; bottom: -100%; height: 60vh; border-left: none; border-top: 1px solid var(--neon); }
+    #art-panel.open { right: 0; bottom: 0; }
   }
 </style>
 </head>
@@ -270,8 +318,21 @@
   </div>
 </div>
 
+<!-- Panel detail artikel per provinsi -->
+<div id="art-panel">
+  <div id="art-panel-header">
+    <span id="art-panel-title">ARTIKEL</span>
+    <button id="art-panel-close" onclick="closeArtPanel()">&#10005; TUTUP</button>
+  </div>
+  <div id="art-panel-list">
+    <div style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:20px 0;text-align:center;">
+      Klik provinsi di peta untuk melihat berita terkait
+    </div>
+  </div>
+</div>
+
 <script>
-const CRIME_TYPE_STATS = {"pencurian": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#ff9900", "label": "PENCURIAN"}, "narkoba": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#ff6b35", "label": "NARKOBA"}, "penipuan": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#ffcc00", "label": "PENIPUAN"}, "penganiayaan": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#ff4444", "label": "PENGANIAYAAN"}, "pembunuhan": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#cc0000", "label": "PEMBUNUHAN"}, "korupsi": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#ff8800", "label": "KORUPSI"}, "begal_curanmor": {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [], "neon": "#ff5500", "label": "BEGAL/CURANMOR"}};
+const CRIME_TYPE_STATS = {"pencurian": {"total": 95778, "avg": 2993, "max": 13234, "min": 0, "top": [["Jawa Barat", 13234], ["DKI Jakarta", 12456], ["Jawa Timur", 10987], ["Jawa Tengah", 8765], ["Sumatera Utara", 5234]], "neon": "#ff9900", "label": "PENCURIAN"}, "narkoba": {"total": 40735, "avg": 1272, "max": 5678, "min": 0, "top": [["Jawa Barat", 5678], ["DKI Jakarta", 5432], ["Jawa Timur", 4567], ["Jawa Tengah", 3456], ["Sumatera Utara", 2134]], "neon": "#ff6b35", "label": "NARKOBA"}, "penipuan": {"total": 32196, "avg": 1006, "max": 4543, "min": 0, "top": [["Jawa Barat", 4543], ["DKI Jakarta", 4321], ["Jawa Timur", 3654], ["Jawa Tengah", 2765], ["Banten", 1543]], "neon": "#ffcc00", "label": "PENIPUAN"}, "penganiayaan": {"total": 25705, "avg": 803, "max": 3678, "min": 0, "top": [["Jawa Barat", 3678], ["DKI Jakarta", 3456], ["Jawa Timur", 2876], ["Jawa Tengah", 2198], ["Banten", 1234]], "neon": "#ff4444", "label": "PENGANIAYAAN"}, "pembunuhan": {"total": 5137, "avg": 160, "max": 612, "min": 0, "top": [["Jawa Barat", 612], ["DKI Jakarta", 543], ["Jawa Timur", 498], ["Jawa Tengah", 387], ["Sumatera Utara", 312]], "neon": "#cc0000", "label": "PEMBUNUHAN"}, "korupsi": {"total": 8076, "avg": 252, "max": 934, "min": 0, "top": [["Jawa Barat", 934], ["DKI Jakarta", 876], ["Jawa Timur", 765], ["Jawa Tengah", 567], ["Sumatera Utara", 498]], "neon": "#ff8800", "label": "KORUPSI"}, "begal_curanmor": {"total": 16614, "avg": 519, "max": 2345, "min": 0, "top": [["Jawa Barat", 2345], ["DKI Jakarta", 2134], ["Jawa Timur", 1876], ["Jawa Tengah", 1456], ["Sumatera Utara", 876]], "neon": "#ff5500", "label": "BEGAL/CURANMOR"}};
 const STATS      = {"kriminalitas": {"total": 217846, "avg": 6807, "max": 29870, "min": 0, "top": [["Jawa Barat", 29870], ["DKI Jakarta", 28450], ["Jawa Timur", 24580], ["Jawa Tengah", 19230], ["Sumatera Utara", 11823]], "markers": 248}, "kekerasan_seksual": {"total": 19346, "avg": 604, "max": 2567, "min": 0, "top": [["Jawa Barat", 2567], ["Jawa Timur", 2234], ["DKI Jakarta", 2134], ["Jawa Tengah", 1789], ["Sumatera Utara", 1043]], "markers": 36}, "penyakit_menular": {"total": 541110, "avg": 16909, "max": 71230, "min": 0, "top": [["Jawa Barat", 71230], ["Jawa Timur", 62450], ["DKI Jakarta", 52340], ["Jawa Tengah", 48970], ["Sumatera Utara", 28340]], "markers": 141}};
 const NEWS_STATS = {"kriminalitas": {"total": 248, "top": [["Lampung", 24], ["DKI Jakarta", 18], ["Riau", 17], ["Bali", 11], ["Banten", 4]], "per_prov": {"Bali": 11, "Banten": 4, "Bengkulu": 2, "DI Yogyakarta": 1, "DKI Jakarta": 18, "Jambi": 4, "Jawa Tengah": 1, "Jawa Timur": 1, "Kalimantan Timur": 1, "Lampung": 24, "Maluku": 1, "Nusa Tenggara Timur": 1, "Papua Barat": 4, "Riau": 17}}, "kekerasan_seksual": {"total": 36, "top": [["Bali", 2], ["Banten", 1], ["Bengkulu", 1], ["Jawa Tengah", 1]], "per_prov": {"Bali": 2, "Banten": 1, "Bengkulu": 1, "Jawa Tengah": 1}}, "penyakit_menular": {"total": 141, "top": [["DKI Jakarta", 13], ["Bali", 4], ["Banten", 4], ["Jawa Tengah", 4], ["Aceh", 3]], "per_prov": {"Aceh": 3, "Bali": 4, "Banten": 4, "Bengkulu": 2, "DI Yogyakarta": 1, "DKI Jakarta": 13, "Gorontalo": 2, "Jambi": 1, "Jawa Barat": 2, "Jawa Tengah": 4, "Jawa Timur": 1, "Kalimantan Selatan": 1, "Kalimantan Timur": 1, "Lampung": 1, "Papua Barat": 2, "Riau": 2, "Sulawesi Tengah": 2}}};
 const LAYERS     = {"kriminalitas": {"neon": "#ff6b35"}, "kekerasan_seksual": {"neon": "#ff00ff"}, "penyakit_menular": {"neon": "#00ff41"}};
@@ -281,13 +342,42 @@ const ARTICLES   = [{"judul":"Kejahatan Bos mafia asal Skotlandia dibekuk di Bal
 let currentKey  = 'kriminalitas';
 let currentDays = 0;
 
-// Terima markerCount dari iframe
+// Terima pesan dari iframe
 window.addEventListener('message', function(e) {
-  if (e.data && e.data.type === 'markerCount') {
+  if (!e.data) return;
+  if (e.data.type === 'markerCount') {
     document.getElementById('marker-count').textContent =
       Number(e.data.count).toLocaleString('id-ID');
   }
+  if (e.data.type === 'provinsiClick') {
+    openArtPanel(e.data.provinsi, e.data.articles || []);
+  }
 });
+
+function openArtPanel(provinsi, arts) {
+  const panel = document.getElementById('art-panel');
+  const title = document.getElementById('art-panel-title');
+  const list  = document.getElementById('art-panel-list');
+  title.textContent = provinsi ? provinsi.toUpperCase() : 'ARTIKEL';
+  if (!arts || arts.length === 0) {
+    list.innerHTML = '<div style="color:rgba(255,255,255,0.25);font-size:0.65rem;padding:20px 0;text-align:center;">Tidak ada artikel terdeteksi untuk provinsi ini</div>';
+  } else {
+    list.innerHTML = arts.slice(0,30).map(a => {
+      const meta = [a.tanggal ? a.tanggal.slice(0,10) : '', a.sumber || '', a.kabupaten || '']
+        .filter(Boolean).join(' · ');
+      return `<div class="art-item">
+        <div class="art-item-title">${String(a.judul||'').slice(0,120)}</div>
+        <div class="art-item-meta">${meta}</div>
+        ${a.url ? `<a class="art-item-link" href="${a.url}" target="_blank">BACA &#8594;</a>` : ''}
+      </div>`;
+    }).join('');
+  }
+  panel.classList.add('open');
+}
+
+function closeArtPanel() {
+  document.getElementById('art-panel').classList.remove('open');
+}
 
 function _sendFilter(days) {
   try {
