@@ -129,14 +129,14 @@ LAYERS = {
         "icon":   "&#128664;",
         "neon":   "#ffcc00",
         "colors": ["#0d0a00", "#2d2200", "#665500", "#ccaa00", "#ffcc00"],
-        "col":    "jumlah_kecelakaan",
+        "col":    "kecelakaan_lalin",
     },
     "stunting": {
         "label":  "STUNTING/GIZI BURUK",
         "icon":   "&#129657;",
         "neon":   "#00ccff",
         "colors": ["#000d1a", "#001f40", "#004488", "#0088cc", "#00ccff"],
-        "col":    "jumlah_balita_stunting",
+        "col":    "stunting",
     },
 }
 
@@ -195,6 +195,25 @@ _extra_data = {
     "stunting":         _load_extra_csv("stunting.csv", "jumlah_balita_stunting"),
 }
 
+# Populasi per provinsi 2023 (BPS Proyeksi Penduduk)
+_POPULASI = {
+    "Aceh": 5481118, "Sumatera Utara": 15114918, "Sumatera Barat": 5621197,
+    "Riau": 6816653, "Jambi": 3641504, "Sumatera Selatan": 8786072,
+    "Bengkulu": 2049422, "Lampung": 9127033, "Kepulauan Bangka Belitung": 1478674,
+    "Kepulauan Riau": 2219100, "DKI Jakarta": 10562088, "Jawa Barat": 49935858,
+    "Jawa Tengah": 36741420, "DI Yogyakarta": 3847734, "Jawa Timur": 40665696,
+    "Banten": 13028566, "Bali": 4422764, "Nusa Tenggara Barat": 5296008,
+    "Nusa Tenggara Timur": 5629584, "Kalimantan Barat": 5574368,
+    "Kalimantan Tengah": 2718003, "Kalimantan Selatan": 4362556,
+    "Kalimantan Timur": 4004793, "Kalimantan Utara": 760579,
+    "Sulawesi Utara": 2629755, "Sulawesi Tengah": 3151369,
+    "Sulawesi Selatan": 9434183, "Sulawesi Tenggara": 2758054,
+    "Gorontalo": 1192717, "Sulawesi Barat": 1413069,
+    "Maluku": 1848923, "Maluku Utara": 1319022,
+    "Papua Barat": 1148855, "Papua": 4356700,
+}
+_pop_series = pd.Series(_POPULASI)
+
 # Pivot data per kategori (3 kategori utama dari df_final, 2 dari CSV terpisah)
 def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
     return (
@@ -209,6 +228,50 @@ for kat in _BASE_LAYERS:
     data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
 for kat in ["kecelakaan_lalin", "stunting"]:
     data[kat] = data["id_wilayah"].map(_extra_data[kat]).fillna(0).astype(int)
+
+# Per-kapita: kasus per 100k penduduk
+_crime_rate_raw = _load_extra_csv("kriminalitas_rate.csv", "crime_rate_per_100k")
+def _per100k(series: pd.Series, use_raw: pd.Series | None = None) -> pd.Series:
+    if use_raw is not None and not use_raw.empty:
+        return use_raw.reindex(series.index).fillna(0)
+    pop = _pop_series.reindex(series.index).replace(0, pd.NA)
+    return (series / pop * 100000).fillna(0).round(1)
+
+def _to_prov_series(series_or_df_col: pd.Series) -> pd.Series:
+    """Deduplicate index by grouping (sum) to ensure unique province index."""
+    s = series_or_df_col.copy()
+    if s.index.duplicated().any():
+        s = s.groupby(s.index).sum()
+    return s
+
+_data_idx = data.set_index("id_wilayah")
+_per100k_data = {
+    "kriminalitas":     _per100k(_to_prov_series(_data_idx["kriminalitas"]), _crime_rate_raw),
+    "kekerasan_seksual":_per100k(_to_prov_series(_data_idx["kekerasan_seksual"])),
+    "penyakit_menular": _per100k(_to_prov_series(_data_idx["penyakit_menular"])),
+    "kecelakaan_lalin": _per100k(_to_prov_series(_data_idx["kecelakaan_lalin"])),
+    "stunting":         _per100k(_load_extra_csv("stunting.csv", "prevalensi_stunting_pct")),
+}
+
+# Risk score: composite index 0-100 dari semua kategori (min-max normalisasi)
+def _risk_score() -> pd.Series:
+    from process import PROVINSI_RESMI
+    scores = pd.Series(0.0, index=PROVINSI_RESMI)
+    count  = pd.Series(0,   index=PROVINSI_RESMI)
+    for kat, s in _per100k_data.items():
+        mx = s.max()
+        if mx <= 0:
+            continue
+        norm = (s / mx).reindex(PROVINSI_RESMI).fillna(0)
+        scores += norm
+        count  += (norm > 0).astype(int)
+    combined = scores / count.replace(0, 1)
+    mx = combined.max()
+    if mx > 0:
+        combined = (combined / mx * 100).round(1)
+    return combined
+
+_risk_scores = _risk_score()
 
 # Statistik artikel berita per layer
 def _news_stats(kategori: str) -> dict:
@@ -260,18 +323,34 @@ for jenis, cfg in CRIME_TYPES.items():
     }
 
 # Statistik per layer utama
-stats = {
-    key: {
-        "total":   int(data[key].sum()),
-        "avg":     int(data[key].mean()),
-        "max":     int(data[key].max()),
-        "min":     int(data[key].min()),
-        "top":     data.nlargest(5, key)[["id_wilayah", key]].values.tolist(),
-        "markers": int(len(df_articles[df_articles["kategori"] == key]))
-                   if not df_articles.empty else 0,
+def _stats_for(key: str) -> dict:
+    s = data[key]
+    p = _per100k_data.get(key, pd.Series(dtype=float))
+    top5 = data.nlargest(5, key)[["id_wilayah", key]].values.tolist()
+    top5_p = (
+        p.nlargest(5).reset_index().values.tolist()
+        if not p.empty else []
+    )
+    return {
+        "total":      int(s.sum()),
+        "avg":        int(s.mean()),
+        "max":        int(s.max()),
+        "min":        int(s.min()),
+        "top":        top5,
+        "per100k_avg": float(round(p.mean(), 1)) if not p.empty else 0,
+        "per100k_max": float(round(p.max(), 1)) if not p.empty else 0,
+        "top_per100k": [[str(r[0]), float(r[1])] for r in top5_p],
+        "markers":    int(len(df_articles[df_articles["kategori"] == key]))
+                      if not df_articles.empty else 0,
     }
-    for key in LAYERS
-}
+
+stats = {key: _stats_for(key) for key in LAYERS}
+
+# Risk score per provinsi (untuk sidebar)
+_risk_top10 = (
+    _risk_scores.nlargest(10).reset_index().values.tolist()
+    if not _risk_scores.empty else []
+)
 
 
 # ---------------------------------------------------------------------------
@@ -285,11 +364,16 @@ def _articles_for(kategori: str) -> list[dict]:
             "kategori", "provinsi", "kabupaten", "lat", "lon"]
     sub = df_articles[df_articles["kategori"] == kategori].copy()
     # Merge sentimen jika ada
-    if not df_sentiment.empty:
+    if not df_sentiment.empty and "tweet_id" in df_sentiment.columns:
+        # Gunakan index integer artikel sebagai tweet_id proxy
+        sub = sub.reset_index()
+        df_sent_str = df_sentiment.copy()
+        df_sent_str["tweet_id"] = df_sent_str["tweet_id"].astype(str)
+        sub["idx_str"] = sub["index"].astype(str)
         sub = sub.merge(
-            df_sentiment[["tweet_id", "sentimen", "sentimen_score"]],
-            left_index=True, right_on="tweet_id", how="left"
-        ) if "tweet_id" in df_sentiment.columns else sub
+            df_sent_str[["tweet_id", "sentimen", "sentimen_score"]],
+            left_on="idx_str", right_on="tweet_id", how="left"
+        ).drop(columns=["index", "idx_str", "tweet_id"], errors="ignore")
     existing = [c for c in cols + ["sentimen"] if c in sub.columns]
     return sub[existing].fillna("").to_dict(orient="records")
 
@@ -543,8 +627,9 @@ for jenis in CRIME_TYPES:
 crime_type_stats_json = json.dumps(crime_type_stats)
 stats_json            = json.dumps(stats)
 news_stats_json       = json.dumps(news_stats)
-layers_json           = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
+layers_json           = json.dumps({k: {"neon": v["neon"], "label": v["label"]} for k, v in LAYERS.items()})
 sentimen_json         = json.dumps(sentimen_summary)
+risk_json             = json.dumps([[str(r[0]), float(r[1])] for r in _risk_top10])
 
 # Serialize semua artikel untuk marker-count update dari parent
 def _articles_to_json() -> str:
@@ -555,6 +640,27 @@ def _articles_to_json() -> str:
     return df_articles[existing].to_json(orient="records", force_ascii=False)
 
 articles_json = _articles_to_json()
+
+
+def _build_weekly_trend() -> str:
+    """Hitung jumlah artikel per minggu per kategori (12 minggu terakhir)."""
+    if df_articles.empty or "tanggal" not in df_articles.columns:
+        return "{}"
+    df = df_articles.copy()
+    df["tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
+    df = df.dropna(subset=["tanggal", "kategori"])
+    df["week"] = df["tanggal"].dt.to_period("W").apply(lambda p: str(p.start_time.date()))
+    cutoff = df["tanggal"].max() - pd.Timedelta(weeks=12)
+    df = df[df["tanggal"] >= cutoff]
+    weeks = sorted(df["week"].unique())
+    trend: dict = {}
+    for kat in LAYERS:
+        sub = df[df["kategori"] == kat]
+        counts = sub.groupby("week").size()
+        trend[kat] = {"weeks": weeks, "counts": [int(counts.get(w, 0)) for w in weeks]}
+    return json.dumps(trend, ensure_ascii=False)
+
+trend_json = _build_weekly_trend()
 
 data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
 data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
@@ -1082,11 +1188,28 @@ HTML = f"""<!DOCTYPE html>
         <div class="stat-card"><div class="stat-lbl">Rata-rata</div><div class="stat-val" id="s-avg">—</div></div>
         <div class="stat-card"><div class="stat-lbl">Tertinggi</div><div class="stat-val" id="s-max">—</div></div>
         <div class="stat-card"><div class="stat-lbl">Terendah</div><div class="stat-val" id="s-min">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Per 100rb Jiwa (avg)</div><div class="stat-val" id="s-per100k">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Per 100rb Jiwa (max)</div><div class="stat-val" id="s-per100k-max">—</div></div>
       </div>
-      <div class="sec" style="margin-top:4px;">Top 5 provinsi</div>
+      <div class="sec" style="margin-top:4px;">Top 5 provinsi (kasus)</div>
       <table class="top-table">
         <thead><tr><th>#</th><th>Wilayah</th><th>Kasus</th></tr></thead>
         <tbody id="top-body"></tbody>
+      </table>
+      <div class="sec" style="margin-top:8px;">Top 5 provinsi (per 100rb jiwa)</div>
+      <table class="top-table">
+        <thead><tr><th>#</th><th>Wilayah</th><th>Per 100rb</th></tr></thead>
+        <tbody id="top-per100k-body"></tbody>
+      </table>
+
+      <hr class="div"/>
+      <div class="sec">Risk Score Provinsi
+        <span style="font-size:0.5rem;color:#ff6b35;font-family:'Share Tech Mono',monospace;">&#9679; COMPOSITE</span>
+      </div>
+      <div style="font-size:0.55rem;color:rgba(255,255,255,0.3);margin-bottom:6px;">Indeks gabungan 5 kategori, 0–100</div>
+      <table class="top-table">
+        <thead><tr><th>#</th><th>Provinsi</th><th>Score</th></tr></thead>
+        <tbody id="risk-body"></tbody>
       </table>
 
       <hr class="div"/>
@@ -1124,6 +1247,10 @@ HTML = f"""<!DOCTYPE html>
           <span class="sent-count" id="sent-pos-n">0</span>
         </div>
       </div>
+
+      <hr class="div"/>
+      <div class="sec">Tren mingguan (12 minggu)</div>
+      <canvas id="trend-chart" width="220" height="70" style="width:100%;margin-top:4px;display:block;"></canvas>
     </div>
 
     <!-- ── Tab: FILTER ────────────────────────────────────── -->
@@ -1198,6 +1325,8 @@ const NEWS_STATS = {news_stats_json};
 const LAYERS     = {layers_json};
 const SENTIMEN   = {sentimen_json};
 const ARTICLES   = {articles_json};
+const RISK_TOP10 = {risk_json};
+const TREND      = {trend_json};
 
 let currentKey  = 'kriminalitas';
 let currentDays = 0;
@@ -1322,24 +1451,80 @@ function updateSentimen(key) {{
   document.getElementById('sent-pos-n').textContent = pos;
 }}
 
+function drawTrend(key, neon) {{
+  const canvas = document.getElementById('trend-chart');
+  if (!canvas || !canvas.getContext) return;
+  const t = (TREND && TREND[key]) ? TREND[key] : null;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 220, H = canvas.offsetHeight || 70;
+  canvas.width = W; canvas.height = H;
+  ctx.clearRect(0, 0, W, H);
+  if (!t || !t.counts || t.counts.length < 2) {{
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.font = '10px monospace';
+    ctx.fillText('Belum ada data tren', 8, H/2);
+    return;
+  }}
+  const counts = t.counts;
+  const mx = Math.max(...counts, 1);
+  const pad = 4;
+  const stepX = (W - pad*2) / (counts.length - 1);
+  // Fill area
+  ctx.beginPath();
+  ctx.moveTo(pad, H - pad - (counts[0]/mx)*(H-pad*2));
+  counts.forEach((v,i) => ctx.lineTo(pad + i*stepX, H - pad - (v/mx)*(H-pad*2)));
+  ctx.lineTo(pad + (counts.length-1)*stepX, H-pad);
+  ctx.lineTo(pad, H-pad);
+  ctx.closePath();
+  ctx.fillStyle = neon + '22';
+  ctx.fill();
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = neon;
+  ctx.lineWidth = 1.5;
+  counts.forEach((v,i) => {{
+    const x = pad + i*stepX, y = H - pad - (v/mx)*(H-pad*2);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }});
+  ctx.stroke();
+  // Dots at max
+  const maxIdx = counts.indexOf(mx);
+  ctx.beginPath();
+  ctx.arc(pad+maxIdx*stepX, H-pad-(mx/mx)*(H-pad*2), 3, 0, Math.PI*2);
+  ctx.fillStyle = neon;
+  ctx.fill();
+}}
+
 function updateStats(s, neon, key) {{
   if (neon) document.documentElement.style.setProperty('--neon', neon);
   document.getElementById('s-total').textContent = (s.total||0).toLocaleString('id-ID');
   document.getElementById('s-avg').textContent   = (s.avg||0).toLocaleString('id-ID');
   document.getElementById('s-max').textContent   = (s.max||0).toLocaleString('id-ID');
   document.getElementById('s-min').textContent   = (s.min||0).toLocaleString('id-ID');
+  document.getElementById('s-per100k').textContent     = (s.per100k_avg||0).toLocaleString('id-ID');
+  document.getElementById('s-per100k-max').textContent = (s.per100k_max||0).toLocaleString('id-ID');
   document.getElementById('top-body').innerHTML  = (s.top||[]).map(([w,k],i) =>
     `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
      <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
   ).join('');
+  const emptyRow = '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
+  document.getElementById('top-per100k-body').innerHTML = (s.top_per100k||[]).map(([w,k],i) =>
+    `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
+     <td class="td-val">${{Number(k).toFixed(1)}}</td></tr>`
+  ).join('') || emptyRow;
+  document.getElementById('risk-body').innerHTML = (RISK_TOP10||[]).map(([w,k],i) =>
+    `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
+     <td class="td-val" style="color:#ff6b35">${{Number(k).toFixed(1)}}</td></tr>`
+  ).join('') || emptyRow;
   if (key && NEWS_STATS[key]) {{
     const ns = NEWS_STATS[key];
     document.getElementById('n-total').textContent = (ns.total||0).toLocaleString('id-ID');
     document.getElementById('news-top-body').innerHTML = (ns.top||[]).map(([w,k],i) =>
       `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
        <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
-    ).join('') || '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
+    ).join('') || emptyRow;
   }}
+  if (key && neon) drawTrend(key, neon);
 }}
 
 function _loadMap(src) {{

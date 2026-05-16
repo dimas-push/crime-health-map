@@ -1,4 +1,4 @@
-nama_provinsi,jenis_kejahatan,jumlah,tahun,sumber
+nama_provinsi,jenis_kejahatan,jumlah_kasus,tahun,sumber
 Aceh,pencurian,1456,2023,BPS Statistik Kriminal 2023
 Sumatera Utara,pencurian,5234,2023,BPS Statistik Kriminal 2023
 Sumatera Barat,pencurian,1876,2023,BPS Statistik Kriminal 2023

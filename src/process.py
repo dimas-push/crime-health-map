@@ -261,6 +261,36 @@ def build_final_table(
     return base
 
 
+def load_kecelakaan_lalin() -> pd.DataFrame:
+    """Load data kecelakaan lalu lintas dari kecelakaan_lalin.csv."""
+    path = RAW_DIR / "kecelakaan_lalin.csv"
+    if not path.exists():
+        print(f"[process] kecelakaan_lalin.csv tidak ditemukan, skip.")
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    df["nama_provinsi"] = df["nama_provinsi"].apply(normalize_provinsi)
+    df = df[df["nama_provinsi"].notna()]
+    df = df.rename(columns={"jumlah_kecelakaan": "jumlah_kasus"})
+    df["kategori"]    = "kecelakaan_lalin"
+    df["sumber_tipe"] = "official"
+    return df[["nama_provinsi", "kategori", "jumlah_kasus", "tahun", "sumber", "sumber_tipe"]]
+
+
+def load_stunting() -> pd.DataFrame:
+    """Load data stunting dari stunting.csv (jumlah balita stunting)."""
+    path = RAW_DIR / "stunting.csv"
+    if not path.exists():
+        print(f"[process] stunting.csv tidak ditemukan, skip.")
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    df["nama_provinsi"] = df["nama_provinsi"].apply(normalize_provinsi)
+    df = df[df["nama_provinsi"].notna()]
+    df = df.rename(columns={"jumlah_balita_stunting": "jumlah_kasus"})
+    df["kategori"]    = "stunting"
+    df["sumber_tipe"] = "official"
+    return df[["nama_provinsi", "kategori", "jumlah_kasus", "tahun", "sumber", "sumber_tipe"]]
+
+
 def load_crime_detail() -> pd.DataFrame:
     """Load kriminalitas_detail.csv untuk peta sub-kategori kejahatan."""
     path = RAW_DIR / "kriminalitas_detail.csv"
@@ -275,10 +305,33 @@ def load_crime_detail() -> pd.DataFrame:
     return df
 
 
+_PROV_COORDS: dict[str, tuple[float, float]] = {
+    "Aceh": (-5.5484, 95.3238), "Sumatera Utara": (3.5833, 98.6667),
+    "Sumatera Barat": (-0.9492, 100.3543), "Riau": (0.5071, 101.4478),
+    "Jambi": (-1.6101, 103.6131), "Sumatera Selatan": (-2.9908, 104.7565),
+    "Bengkulu": (-3.8004, 102.2655), "Lampung": (-5.4295, 105.2610),
+    "Kepulauan Bangka Belitung": (-2.1270, 106.1128),
+    "Kepulauan Riau": (0.9169, 104.4782), "DKI Jakarta": (-6.2088, 106.8456),
+    "Jawa Barat": (-6.9175, 107.6191), "Jawa Tengah": (-6.9932, 110.4229),
+    "DI Yogyakarta": (-7.7956, 110.3695), "Jawa Timur": (-7.2575, 112.7521),
+    "Banten": (-6.4058, 106.0640), "Bali": (-8.6500, 115.2167),
+    "Nusa Tenggara Barat": (-8.5833, 116.1167),
+    "Nusa Tenggara Timur": (-8.5574, 121.0794),
+    "Kalimantan Barat": (-0.0226, 109.3425), "Kalimantan Tengah": (-1.6814, 113.3824),
+    "Kalimantan Selatan": (-3.3194, 114.5908), "Kalimantan Timur": (-0.5022, 117.1536),
+    "Kalimantan Utara": (3.0731, 116.0413), "Sulawesi Utara": (1.4748, 124.8421),
+    "Sulawesi Tengah": (-0.9003, 119.8779), "Sulawesi Selatan": (-5.1477, 119.4327),
+    "Sulawesi Tenggara": (-4.1462, 122.1746), "Gorontalo": (0.5435, 123.0568),
+    "Sulawesi Barat": (-2.8441, 119.2321), "Maluku": (-3.6954, 128.1814),
+    "Maluku Utara": (0.7893, 127.5814), "Papua Barat": (-1.3361, 133.1747),
+    "Papua": (-4.2699, 138.0804),
+}
+
+
 def load_articles_full() -> pd.DataFrame:
     """
-    Load artikel lengkap dari news.csv (dengan lat/lon) untuk tabel marker.
-    Kembalikan baris yang punya koordinat agar bisa ditampilkan di peta.
+    Load artikel dari news.csv untuk tabel marker.
+    Artikel dengan provinsi tapi tanpa koordinat di-fallback ke koordinat ibukota provinsi.
     """
     path = RAW_DIR / "news.csv"
     if not path.exists():
@@ -289,8 +342,16 @@ def load_articles_full() -> pd.DataFrame:
     df["judul"]     = df["judul"].apply(clean_text)
     df["deskripsi"] = df["deskripsi"].apply(clean_text) if "deskripsi" in df.columns else ""
 
-    # Hanya artikel dengan koordinat valid
+    # Isi koordinat yang kosong menggunakan ibukota provinsi
+    missing_coords = df["lat"].isna() & df["provinsi"].notna()
+    for prov, coords in _PROV_COORDS.items():
+        mask = missing_coords & (df["provinsi"] == prov)
+        df.loc[mask, "lat"] = coords[0]
+        df.loc[mask, "lon"] = coords[1]
+
     df = df[df["lat"].notna() & df["lon"].notna()].copy()
+    before_recover = (df["lat"].notna()).sum()
+    print(f"[process] {before_recover}/{len(df)+missing_coords.sum()} artikel dengan koordinat (termasuk recovery ibukota prov).")
     return df[[
         "judul", "deskripsi", "url", "tanggal", "sumber",
         "kategori", "provinsi", "kabupaten", "lat", "lon", "scraped_at",
@@ -327,7 +388,18 @@ def process_all() -> pd.DataFrame:
 
     print("\n[process] Load data resmi ...")
     official = load_official()
-    print(f"  {len(official)} baris data resmi.")
+    print(f"  {len(official)} baris data resmi (3 kategori utama).")
+
+    print("\n[process] Load kecelakaan lalu lintas ...")
+    df_lalin = load_kecelakaan_lalin()
+    print(f"  {len(df_lalin)} baris kecelakaan_lalin.")
+
+    print("\n[process] Load stunting ...")
+    df_stunting = load_stunting()
+    print(f"  {len(df_stunting)} baris stunting.")
+
+    official = pd.concat([official, df_lalin, df_stunting], ignore_index=True)
+    print(f"  Total official setelah merge: {len(official)} baris.")
 
     print("\n[process] Load data berita ...")
     news = load_news()
@@ -353,7 +425,7 @@ def process_all() -> pd.DataFrame:
     final.to_csv(CSV_PATH, index=False)
     print(f"[process] CSV final disimpan: {CSV_PATH}")
 
-    print(f"\n[process] Selesai. {len(final)} baris ({len(PROVINSI_RESMI)} prov x 3 kategori).")
+    print(f"\n[process] Selesai. {len(final)} baris ({len(PROVINSI_RESMI)} prov x 5 kategori).")
     print(final.groupby("kategori")[["jumlah_kasus", "jumlah_artikel", "jumlah_tweet"]].sum().to_string())
 
     return final

@@ -22,6 +22,28 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, str(Path(__file__).parent))
 from geocode import get_coords, _COORDS, _ALIASES, _BLACKLIST, _CONTEXT_BLACKLIST
 
+# Ibukota provinsi → kunci geocode (untuk fallback provinsi tanpa kabupaten)
+_PROV_CAPITAL: dict[str, str] = {
+    "aceh": "kota banda aceh", "sumatera utara": "kota medan",
+    "sumatera barat": "kota padang", "riau": "kota pekanbaru",
+    "jambi": "kota jambi", "sumatera selatan": "kota palembang",
+    "bengkulu": "kota bengkulu", "lampung": "kota bandar lampung",
+    "kepulauan bangka belitung": "kota pangkal pinang",
+    "kepulauan riau": "kota tanjung pinang",
+    "dki jakarta": "jakarta pusat", "jawa barat": "kota bandung",
+    "jawa tengah": "kota semarang", "di yogyakarta": "kota yogyakarta",
+    "jawa timur": "kota surabaya", "banten": "kota serang",
+    "bali": "kota denpasar", "nusa tenggara barat": "kota mataram",
+    "nusa tenggara timur": "kota kupang", "kalimantan barat": "kota pontianak",
+    "kalimantan tengah": "kota palangka raya", "kalimantan selatan": "kota banjarmasin",
+    "kalimantan timur": "kota samarinda", "kalimantan utara": "kota tarakan",
+    "sulawesi utara": "kota manado", "sulawesi tengah": "kota palu",
+    "sulawesi selatan": "kota makassar", "sulawesi tenggara": "kota kendari",
+    "gorontalo": "kota gorontalo", "sulawesi barat": "kabupaten mamuju",
+    "maluku": "kota ambon", "maluku utara": "kota ternate",
+    "papua barat": "kota sorong", "papua": "kota jayapura",
+}
+
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -288,10 +310,15 @@ def scrape_feeds() -> pd.DataFrame:
             if c:
                 return str(kab), c[0], c[1]
 
-        # Fallback ke ibukota provinsi — hanya jika nama provinsi ada di _ALIASES
-        # (artinya ada mapping eksplisit provinsi → ibukota, bukan tebakan)
+        # Fallback ke ibukota provinsi menggunakan tabel _PROV_CAPITAL
         if prov and not pd.isna(prov):
             prov_lower = str(prov).lower()
+            capital_key = _PROV_CAPITAL.get(prov_lower)
+            if capital_key:
+                c = get_coords(capital_key)
+                if c:
+                    return str(prov), c[0], c[1]
+            # Coba alias langsung (untuk kasus edge)
             if prov_lower in _ALIASES:
                 c = get_coords(prov_lower)
                 if c:
