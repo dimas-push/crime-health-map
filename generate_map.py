@@ -254,7 +254,7 @@ def make_map(key: str) -> str:
         ),
     ).add_to(m)
 
-    return m._repr_html_()
+    return m.get_root().render()
 
 
 maps = {key: make_map(key) for key in LAYERS}
@@ -313,7 +313,7 @@ def make_crime_type_map(jenis: str) -> str:
             ),
         ),
     ).add_to(m)
-    return m._repr_html_()
+    return m.get_root().render()
 
 
 crime_type_maps = {j: make_crime_type_map(j) for j in CRIME_TYPES}
