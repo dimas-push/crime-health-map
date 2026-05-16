@@ -360,8 +360,12 @@ stats = {
     for key in LAYERS
 }
 
-maps_json             = json.dumps(maps)
-crime_type_maps_json  = json.dumps(crime_type_maps)
+def _safe_json(obj) -> str:
+    """JSON encode dan escape </ agar tidak menutup <script> tag di HTML."""
+    return json.dumps(obj, ensure_ascii=False).replace('</', '<\\/')
+
+maps_json             = _safe_json(maps)
+crime_type_maps_json  = _safe_json(crime_type_maps)
 crime_type_stats_json = json.dumps(crime_type_stats)
 stats_json            = json.dumps(stats)
 news_stats_json       = json.dumps(news_stats)
