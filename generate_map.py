@@ -1,44 +1,42 @@
 """
-Generate docs/index.html dengan UI cyberpunk dan peta Folium ter-embed.
+Generate docs/index.html + docs/maps/*.html dengan UI cyberpunk dan peta Folium.
 Usage: python generate_map.py
 """
 
+import json
 import sqlite3
 import sys
-import json
 from pathlib import Path
 
-import folium
 import branca.colormap as cm
-import numpy as np
+import folium
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
-from visualize import load_geodataframe, _ID_COLUMNS
-from process import process_all
-from collect_official import collect_all as collect_official_all
 from collect_news import collect_news
+from collect_official import collect_all as collect_official_all
 from collect_social import collect_social
+from process import process_all
 from sentiment import run_sentiment_analysis
+from visualize import _ID_COLUMNS, load_geodataframe
 
 DOCS_DIR      = Path(__file__).parent / "docs"
+MAPS_DIR      = DOCS_DIR / "maps"
 PROCESSED_DIR = Path(__file__).parent / "data" / "processed"
 DB_PATH       = PROCESSED_DIR / "crime_health.db"
 DOCS_DIR.mkdir(exist_ok=True)
+MAPS_DIR.mkdir(exist_ok=True)
 
 
+# ---------------------------------------------------------------------------
+# Data loaders
+# ---------------------------------------------------------------------------
 def load_or_build_data() -> pd.DataFrame:
-    """
-    Load data dari SQLite jika sudah ada,
-    atau jalankan pipeline lengkap jika belum.
-    """
     final_csv = PROCESSED_DIR / "final.csv"
-
     if final_csv.exists():
         print("[generate_map] Memuat data dari cache (final.csv) ...")
         return pd.read_csv(final_csv)
-
-    print("[generate_map] Data belum ada, jalankan pipeline pengumpulan data ...")
+    print("[generate_map] Data belum ada, jalankan pipeline ...")
     collect_official_all()
     collect_news()
     collect_social()
@@ -48,7 +46,6 @@ def load_or_build_data() -> pd.DataFrame:
 
 
 def load_crime_detail() -> pd.DataFrame:
-    """Ambil data kriminalitas detail per jenis dari SQLite."""
     if not DB_PATH.exists():
         return pd.DataFrame()
     with sqlite3.connect(DB_PATH) as conn:
@@ -62,7 +59,6 @@ def load_crime_detail() -> pd.DataFrame:
 
 
 def load_articles() -> pd.DataFrame:
-    """Ambil artikel dengan koordinat dari SQLite untuk marker layer."""
     if not DB_PATH.exists():
         return pd.DataFrame()
     with sqlite3.connect(DB_PATH) as conn:
@@ -78,10 +74,8 @@ def load_articles() -> pd.DataFrame:
 
 
 def load_sentiment_summary() -> dict:
-    """Ambil ringkasan sentimen dari SQLite untuk ditampilkan di UI."""
     if not DB_PATH.exists():
         return {}
-
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
@@ -91,7 +85,7 @@ def load_sentiment_summary() -> dict:
                 "GROUP BY kategori, sentimen",
                 conn,
             )
-            result = {}
+            result: dict = {}
             for kat, grp in df.groupby("kategori"):
                 result[kat] = grp.set_index("sentimen")["jumlah"].to_dict()
             return result
@@ -100,7 +94,7 @@ def load_sentiment_summary() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Konfigurasi layer: warna neon per kategori (gelap → neon)
+# Konfigurasi layer
 # ---------------------------------------------------------------------------
 LAYERS = {
     "kriminalitas": {
@@ -123,41 +117,47 @@ LAYERS = {
     },
 }
 
+CRIME_TYPES = {
+    "pencurian":      {"label": "PENCURIAN",      "neon": "#ff9900"},
+    "narkoba":        {"label": "NARKOBA",         "neon": "#ff6b35"},
+    "penipuan":       {"label": "PENIPUAN",        "neon": "#ffcc00"},
+    "penganiayaan":   {"label": "PENGANIAYAAN",    "neon": "#ff4444"},
+    "pembunuhan":     {"label": "PEMBUNUHAN",      "neon": "#cc0000"},
+    "korupsi":        {"label": "KORUPSI",         "neon": "#ff8800"},
+    "begal_curanmor": {"label": "BEGAL/CURANMOR", "neon": "#ff5500"},
+}
+
+
 # ---------------------------------------------------------------------------
-# 1. Load data
+# 1. Load semua data
 # ---------------------------------------------------------------------------
 print("Memuat GeoDataFrame provinsi ...")
 gdf    = load_geodataframe("provinsi")
 id_col = _ID_COLUMNS["provinsi"]
 
-# Load data nyata dari pipeline; fallback dummy jika belum ada
-df_final = load_or_build_data()
-
-def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
-    sub = (
-        df[df["kategori"] == kategori]
-        .groupby("nama_provinsi")["jumlah_kasus"]
-        .sum()
-    )
-    return sub
-
-# Bangun tabel data sesuai nama provinsi di GeoDataFrame
-data = pd.DataFrame({"id_wilayah": gdf[id_col]})
-for kat in ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]:
-    pivot = _pivot(df_final, kat)
-    data[kat] = data["id_wilayah"].map(pivot).fillna(0).astype(int)
-
+df_final        = load_or_build_data()
 sentimen_summary = load_sentiment_summary()
 df_articles      = load_articles()
 df_crime_detail  = load_crime_detail()
 IS_DUMMY = not (PROCESSED_DIR / "final.csv").exists()
 
-# Hitung statistik dari berita scraping (bukan data statis)
+# Pivot data per kategori
+def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
+    return (
+        df[df["kategori"] == kategori]
+        .groupby("nama_provinsi")["jumlah_kasus"]
+        .sum()
+    )
+
+data = pd.DataFrame({"id_wilayah": gdf[id_col]})
+for kat in LAYERS:
+    data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
+
+# Statistik artikel berita per layer
 def _news_stats(kategori: str) -> dict:
-    """Statistik berbasis artikel berita yang ter-geocode per provinsi."""
     if df_articles.empty:
         return {"total": 0, "top": [], "per_prov": {}}
-    sub = df_articles[df_articles["kategori"] == kategori].copy()
+    sub = df_articles[df_articles["kategori"] == kategori]
     per_prov = (
         sub.groupby("provinsi").size().reset_index(name="jumlah")
         if "provinsi" in sub.columns else pd.DataFrame()
@@ -167,172 +167,30 @@ def _news_stats(kategori: str) -> dict:
         if not per_prov.empty else []
     )
     return {
-        "total": int(len(sub)),
-        "top":   [[str(r[0]), int(r[1])] for r in top5],
+        "total":    int(len(sub)),
+        "top":      [[str(r[0]), int(r[1])] for r in top5],
         "per_prov": per_prov.set_index("provinsi")["jumlah"].to_dict()
-        if not per_prov.empty else {},
+                    if not per_prov.empty else {},
     }
 
 news_stats = {k: _news_stats(k) for k in LAYERS}
 
-# Sub-layer kriminalitas per jenis kejahatan
-CRIME_TYPES = {
-    "pencurian":      {"label": "PENCURIAN",       "neon": "#ff9900"},
-    "narkoba":        {"label": "NARKOBA",          "neon": "#ff6b35"},
-    "penipuan":       {"label": "PENIPUAN",         "neon": "#ffcc00"},
-    "penganiayaan":   {"label": "PENGANIAYAAN",     "neon": "#ff4444"},
-    "pembunuhan":     {"label": "PEMBUNUHAN",       "neon": "#cc0000"},
-    "korupsi":        {"label": "KORUPSI",          "neon": "#ff8800"},
-    "begal_curanmor": {"label": "BEGAL/CURANMOR",  "neon": "#ff5500"},
-}
-
-# ---------------------------------------------------------------------------
-# 2. Build satu peta Folium per layer dengan neon colormap + marker kejadian
-# ---------------------------------------------------------------------------
-ICON_COLOR = {
-    "kriminalitas":      "orange",
-    "kekerasan_seksual": "pink",
-    "penyakit_menular":  "green",
-}
-
-def make_map(key: str) -> str:
-    cfg    = LAYERS[key]
-    neon   = cfg["neon"]
-    values = data[key]
-
-    colormap = cm.LinearColormap(
-        colors=cfg["colors"],
-        vmin=values.min(),
-        vmax=values.max(),
-    )
-
-    m = folium.Map(
-        location=[-2.5, 118.0],
-        zoom_start=5,
-        tiles=None,
-        zoom_control=False,
-    )
-    folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attr="© CartoDB",
-        max_zoom=19,
-    ).add_to(m)
-
-    merged = gdf.merge(
-        data[["id_wilayah", key]],
-        left_on=id_col, right_on="id_wilayah", how="left",
-    )
-    geojson_data = json.loads(merged.to_json())
-
-    # GeoJson dengan fill color dari colormap neon
-    folium.GeoJson(
-        geojson_data,
-        style_function=lambda feat: {
-            "fillColor":   colormap(feat["properties"].get(key) or 0),
-            "fillOpacity": 0.75,
-            "color":       "#0a0a1f",
-            "weight":      0.8,
-        },
-        highlight_function=lambda _: {
-            "fillColor":   neon,
-            "fillOpacity": 0.35,
-            "color":       neon,
-            "weight":      2,
-        },
-        tooltip=folium.GeoJsonTooltip(
-            fields=[id_col, key],
-            aliases=["Wilayah", "Kasus"],
-            style=(
-                f"background:#0a0a1f;"
-                f"color:{neon};"
-                f"font-family:'Share Tech Mono',monospace;"
-                f"font-size:12px;"
-                f"border:1px solid {neon};"
-                f"box-shadow:0 0 8px {neon}88;"
-                f"border-radius:0;"
-            ),
-        ),
-    ).add_to(m)
-
-    return m.get_root().render()
-
-
-maps = {key: make_map(key) for key in LAYERS}
-
-
-def make_crime_type_map(jenis: str) -> str:
-    """Buat peta choropleth per jenis kejahatan dari kriminalitas_detail."""
-    cfg  = CRIME_TYPES[jenis]
-    neon = cfg["neon"]
-
-    if df_crime_detail.empty:
-        return make_map("kriminalitas")
-
-    pivot = (
-        df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
-        .groupby("nama_provinsi")["jumlah_kasus"]
-        .sum()
-    )
-    col_data = pd.DataFrame({"id_wilayah": gdf[id_col]})
-    col_data[jenis] = col_data["id_wilayah"].map(pivot).fillna(0).astype(int)
-
-    colormap = cm.LinearColormap(
-        colors=["#0a0a1f", "#1a0800", "#551500", "#aa3300", neon],
-        vmin=col_data[jenis].min(),
-        vmax=max(col_data[jenis].max(), 1),
-    )
-
-    m = folium.Map(location=[-2.5, 118.0], zoom_start=5, tiles=None, zoom_control=False)
-    folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attr="© CartoDB", max_zoom=19,
-    ).add_to(m)
-
-    merged = gdf.merge(col_data, left_on=id_col, right_on="id_wilayah", how="left")
-    geojson_data = json.loads(merged.to_json())
-
-    folium.GeoJson(
-        geojson_data,
-        style_function=lambda feat: {
-            "fillColor":   colormap(feat["properties"].get(jenis) or 0),
-            "fillOpacity": 0.75,
-            "color":       "#0a0a1f",
-            "weight":      0.8,
-        },
-        highlight_function=lambda _: {
-            "fillColor": neon, "fillOpacity": 0.35,
-            "color": neon, "weight": 2,
-        },
-        tooltip=folium.GeoJsonTooltip(
-            fields=[id_col, jenis],
-            aliases=["Wilayah", cfg["label"]],
-            style=(
-                f"background:#0a0a1f;color:{neon};"
-                f"font-family:'Share Tech Mono',monospace;font-size:12px;"
-                f"border:1px solid {neon};border-radius:0;"
-            ),
-        ),
-    ).add_to(m)
-    return m.get_root().render()
-
-
-crime_type_maps = {j: make_crime_type_map(j) for j in CRIME_TYPES}
-crime_type_stats = {}
+# Statistik crime type detail
+crime_type_stats: dict = {}
 for jenis, cfg in CRIME_TYPES.items():
     if df_crime_detail.empty:
-        crime_type_stats[jenis] = {"total": 0, "avg": 0, "max": 0, "min": 0, "top": []}
+        crime_type_stats[jenis] = {"total": 0, "avg": 0, "max": 0, "min": 0, "top": [],
+                                   "neon": cfg["neon"], "label": cfg["label"]}
         continue
     pivot = (
         df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
-        .groupby("nama_provinsi")["jumlah_kasus"]
-        .sum()
+        .groupby("nama_provinsi")["jumlah_kasus"].sum()
     )
     col_data = gdf[id_col].map(pivot).fillna(0).astype(int)
     top5 = (
         df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
         .groupby("nama_provinsi")["jumlah_kasus"].sum()
-        .nlargest(5).reset_index()
-        .values.tolist()
+        .nlargest(5).reset_index().values.tolist()
     )
     crime_type_stats[jenis] = {
         "total": int(col_data.sum()),
@@ -344,9 +202,7 @@ for jenis, cfg in CRIME_TYPES.items():
         "label": cfg["label"],
     }
 
-# ---------------------------------------------------------------------------
-# 3. Statistik per layer
-# ---------------------------------------------------------------------------
+# Statistik per layer utama
 stats = {
     key: {
         "total":   int(data[key].sum()),
@@ -360,61 +216,267 @@ stats = {
     for key in LAYERS
 }
 
-def _safe_json(obj) -> str:
-    """JSON encode dan escape </ agar tidak menutup <script> tag di HTML."""
-    return json.dumps(obj, ensure_ascii=False).replace('</', '<\\/')
 
-maps_json             = _safe_json(maps)
-crime_type_maps_json  = _safe_json(crime_type_maps)
+# ---------------------------------------------------------------------------
+# 2. Map generation — setiap layer disimpan sebagai file HTML terpisah
+# ---------------------------------------------------------------------------
+def _articles_for(kategori: str) -> list[dict]:
+    """Kembalikan daftar artikel untuk kategori tertentu sebagai list of dict."""
+    if df_articles.empty:
+        return []
+    cols = ["judul", "deskripsi", "url", "tanggal", "sumber",
+            "kategori", "provinsi", "kabupaten", "lat", "lon"]
+    sub = df_articles[df_articles["kategori"] == kategori]
+    existing = [c for c in cols if c in sub.columns]
+    return sub[existing].to_dict(orient="records")
+
+
+def _inject_markers(html: str, articles: list[dict], neon: str) -> str:
+    """
+    Inject script marker ke dalam Folium HTML standalone.
+    Script menerima postMessage {days: N} dari parent untuk filter waktu.
+    """
+    arts_json = json.dumps(articles, ensure_ascii=False).replace('</', r'<\/')
+
+    # Script dibangun sebagai string concatenation, bukan f-string,
+    # agar tidak ada konflik {{ }} antara JS dan Python.
+    script = (
+        '(function(){'
+        'var NEON="' + neon + '";'
+        'var ARTS=' + arts_json + ';'
+        'var _layer=null;'
+
+        'function esc(s){'
+        's=String(s||"");'
+        's=s.replace(/&/g,"&amp;");'
+        's=s.replace(/[<]/g,"&lt;");'
+        's=s.replace(/[>]/g,"&gt;");'
+        's=s.replace(/"/g,"&quot;");'
+        "s=s.replace(/'/g,\"&#39;\");"
+        'return s;}'
+
+        'function _getMap(){'
+        'var ks=Object.keys(window);'
+        'for(var i=0;i<ks.length;i++){'
+        'try{var v=window[ks[i]];'
+        'if(v&&v._leaflet_id!=null&&typeof v.addLayer==="function")return v;'
+        '}catch(e){}}'
+        'return null;}'
+
+        'function buildMarkers(days){'
+        'var m=_getMap();'
+        'if(!m){setTimeout(function(){buildMarkers(days);},200);return;}'
+        'if(_layer){m.removeLayer(_layer);}'
+        '_layer=L.layerGroup().addTo(m);'
+        'var cutoff=days>0?new Date(Date.now()-days*86400000):null;'
+        'var count=0;'
+        'ARTS.forEach(function(a){'
+        'if(!a.lat||!a.lon)return;'
+        'if(cutoff){var d=new Date(a.tanggal);if(!isNaN(d)&&d<cutoff)return;}'
+        'count++;'
+        'var mk=L.circleMarker([a.lat,a.lon],'
+        '{radius:7,color:NEON,fillColor:NEON,fillOpacity:0.85,weight:2});'
+        'var jd=esc(String(a.judul||"").slice(0,120));'
+        'var ds=esc(String(a.deskripsi||"").slice(0,200));'
+        'var tg=esc(String(a.tanggal||"").slice(0,16));'
+        'var sr=esc(String(a.sumber||""));'
+        'var kb=esc(String(a.kabupaten||""));'
+        'var ur=String(a.url||"#");'
+        'var mt=tg+(sr?" | "+sr:"")+(kb?" | "+kb:"");'
+        'var pop='
+        '"<div style=\'background:#0a0a1f;color:"+NEON+";font-family:monospace;font-size:12px;'
+        'border:1px solid "+NEON+";padding:10px;max-width:280px;box-shadow:0 0 12px "+NEON+"55;\'>"'
+        '+"<div style=\'font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;'
+        'border-bottom:1px solid "+NEON+"44;padding-bottom:4px;\'>"+jd+"</div>"'
+        '+"<div style=\'color:"+NEON+"99;font-size:11px;margin-bottom:6px;\'>"+ds+"</div>"'
+        '+"<div style=\'font-size:10px;color:"+NEON+"66;margin-bottom:8px;\'>"+mt+"</div>"'
+        '+"<a href=\'"+ur+"\' target=\'_blank\' style=\'color:"+NEON+";text-decoration:none;'
+        'font-size:11px;border:1px solid "+NEON+";padding:2px 8px;\'>BACA &#8594;</a></div>";'
+        'mk.bindPopup(pop,{maxWidth:300});'
+        'mk.bindTooltip(esc(String(a.judul||"").slice(0,60)));'
+        '_layer.addLayer(mk);});'
+        # Beritahu parent jumlah marker
+        "try{window.parent.postMessage({type:'markerCount',count:count},'*');}catch(e){}"
+        '}'
+
+        'window.addEventListener("message",function(e){'
+        'if(e.data&&typeof e.data.days==="number")buildMarkers(e.data.days);});'
+
+        'document.addEventListener("DOMContentLoaded",function(){buildMarkers(0);});'
+        '})();'
+    )
+
+    tag = '<scr' + 'ipt>' + script + '</' + 'scr' + 'ipt>'
+    return html.replace('</body>', tag + '</body>', 1)
+
+
+def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
+                     colormap: cm.LinearColormap) -> folium.Map:
+    """Buat Folium Map dengan choropleth dan tooltip."""
+    m = folium.Map(location=[-2.5, 118.0], zoom_start=5, tiles=None, zoom_control=False)
+    folium.TileLayer(
+        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attr="© CartoDB", max_zoom=19,
+    ).add_to(m)
+    folium.GeoJson(
+        geojson_data,
+        style_function=lambda feat, cm=colormap, col=value_col: {
+            "fillColor":   cm(feat["properties"].get(col) or 0),
+            "fillOpacity": 0.75,
+            "color":       "#0a0a1f",
+            "weight":      0.8,
+        },
+        highlight_function=lambda _, n=neon: {
+            "fillColor": n, "fillOpacity": 0.35,
+            "color": n, "weight": 2,
+        },
+        tooltip=folium.GeoJsonTooltip(
+            fields=[id_col, value_col],
+            aliases=["Wilayah", "Kasus"],
+            style=(
+                f"background:#0a0a1f;color:{neon};"
+                f"font-family:'Share Tech Mono',monospace;font-size:12px;"
+                f"border:1px solid {neon};box-shadow:0 0 8px {neon}88;border-radius:0;"
+            ),
+        ),
+    ).add_to(m)
+    return m
+
+
+def make_map(key: str) -> None:
+    """Buat peta choropleth per layer utama, simpan ke docs/maps/{key}.html."""
+    cfg    = LAYERS[key]
+    neon   = cfg["neon"]
+    values = data[key]
+    colormap = cm.LinearColormap(
+        colors=cfg["colors"], vmin=values.min(), vmax=values.max(),
+    )
+    import json as _json
+    merged = gdf.merge(data[["id_wilayah", key]], left_on=id_col, right_on="id_wilayah", how="left")
+    geojson_data = _json.loads(merged.to_json())
+
+    m = _make_folium_map(neon, geojson_data, key, colormap)
+    html = m.get_root().render()
+    html = _inject_markers(html, _articles_for(key), neon)
+    (MAPS_DIR / f"{key}.html").write_text(html, encoding="utf-8")
+    print(f"  [map] {key}.html disimpan ({len(html)//1024} KB)")
+
+
+def make_crime_type_map(jenis: str) -> None:
+    """Buat peta choropleth per jenis kejahatan, simpan ke docs/maps/crime_{jenis}.html."""
+    cfg  = CRIME_TYPES[jenis]
+    neon = cfg["neon"]
+
+    dest = MAPS_DIR / f"crime_{jenis}.html"
+
+    if df_crime_detail.empty:
+        # Fallback: salin peta kriminalitas utama
+        src = MAPS_DIR / "kriminalitas.html"
+        if src.exists():
+            dest.write_bytes(src.read_bytes())
+        print(f"  [map] crime_{jenis}.html (fallback dari kriminalitas)")
+        return
+
+    pivot = (
+        df_crime_detail[df_crime_detail["jenis_kejahatan"] == jenis]
+        .groupby("nama_provinsi")["jumlah_kasus"].sum()
+    )
+    col_data = pd.DataFrame({"id_wilayah": gdf[id_col]})
+    col_data[jenis] = col_data["id_wilayah"].map(pivot).fillna(0).astype(int)
+
+    colormap = cm.LinearColormap(
+        colors=["#0a0a1f", "#1a0800", "#551500", "#aa3300", neon],
+        vmin=col_data[jenis].min(),
+        vmax=max(col_data[jenis].max(), 1),
+    )
+
+    import json as _json
+    merged = gdf.merge(col_data, left_on=id_col, right_on="id_wilayah", how="left")
+    geojson_data = _json.loads(merged.to_json())
+
+    m = _make_folium_map(neon, geojson_data, jenis, colormap)
+    html = m.get_root().render()
+    # Crime type maps tidak punya marker artikel
+    html = _inject_markers(html, [], neon)
+    dest.write_text(html, encoding="utf-8")
+    print(f"  [map] crime_{jenis}.html disimpan ({len(html)//1024} KB)")
+
+
+# ---------------------------------------------------------------------------
+# 3. Generate semua file peta
+# ---------------------------------------------------------------------------
+print("\nMembuat peta per layer ...")
+for key in LAYERS:
+    make_map(key)
+
+print("\nMembuat peta per jenis kejahatan ...")
+for jenis in CRIME_TYPES:
+    make_crime_type_map(jenis)
+
+
+# ---------------------------------------------------------------------------
+# 4. Data JSON untuk index.html (kecil, tanpa HTML peta)
+# ---------------------------------------------------------------------------
 crime_type_stats_json = json.dumps(crime_type_stats)
 stats_json            = json.dumps(stats)
 news_stats_json       = json.dumps(news_stats)
 layers_json           = json.dumps({k: {"neon": v["neon"]} for k, v in LAYERS.items()})
 sentimen_json         = json.dumps(sentimen_summary)
-data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
-data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
 
-# Timestamp scraping untuk indikator status di header
-_news_ts = ""
-try:
-    _df_ts = pd.read_csv(PROCESSED_DIR.parent / "raw" / "news.csv")
-    _news_ts = str(_df_ts["scraped_at"].max()) if "scraped_at" in _df_ts.columns else ""
-except Exception:
-    pass
-scraped_at_iso = _news_ts
-total_articles = len(df_articles) if not df_articles.empty else 0
-total_markers  = sum(stats[k]["markers"] for k in LAYERS)
-
-# Serialize artikel ke JSON untuk filter waktu di JS
+# Serialize semua artikel untuk marker-count update dari parent
 def _articles_to_json() -> str:
     if df_articles.empty:
         return "[]"
-    cols = ["judul", "deskripsi", "url", "tanggal", "sumber", "kategori",
-            "provinsi", "kabupaten", "lat", "lon"]
+    cols = ["judul", "tanggal", "kategori", "lat", "lon"]
     existing = [c for c in cols if c in df_articles.columns]
     return df_articles[existing].to_json(orient="records", force_ascii=False)
 
 articles_json = _articles_to_json()
 
-# Neon per kategori (untuk marker warna)
-_NEON_MAP = {k: v["neon"] for k, v in LAYERS.items()}
+data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
+data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
+
+# Timestamp scraping untuk status header
+_news_ts = ""
+try:
+    _df_ts   = pd.read_csv(PROCESSED_DIR.parent / "raw" / "news.csv")
+    _news_ts = str(_df_ts["scraped_at"].max()) if "scraped_at" in _df_ts.columns else ""
+except Exception:
+    pass
+scraped_at_iso = _news_ts
+total_markers  = sum(stats[k]["markers"] for k in LAYERS)
+
 
 # ---------------------------------------------------------------------------
-# 4. HTML Template
+# 5. HTML Template — index.html (UI saja, tanpa embed HTML peta)
 # ---------------------------------------------------------------------------
+def render_crime_type_buttons() -> str:
+    parts = []
+    for j, cfg in CRIME_TYPES.items():
+        neon = cfg['neon']
+        label = cfg['label']
+        parts.append(
+            f'<button class="crime-btn" data-jenis="{j}" onclick="switchCrimeType(\'{j}\',this)"'
+            f' style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;'
+            f'background:transparent;border:1px solid rgba(255,255,255,0.07);'
+            f'color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;'
+            f'font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;"'
+            f' data-neon="{neon}">&#9656; {label}</button>'
+        )
+    return '\n'.join(parts)
+
+
 def render_sidebar_buttons() -> str:
     btns = []
     for i, (key, cfg) in enumerate(LAYERS.items()):
-        active = 'active' if i == 0 else ''
-        btns.append(f"""
-        <button class="layer-btn {active}"
-          data-key="{key}"
-          data-neon="{cfg['neon']}"
-          onclick="switchLayer('{key}', this)">
-          <span class="icon">{cfg['icon']}</span>
-          <span>{cfg['label']}</span>
-        </button>""")
+        active = "active" if i == 0 else ""
+        btns.append(
+            f'<button class="layer-btn {active}" data-key="{key}" data-neon="{cfg["neon"]}"'
+            f' onclick="switchLayer(\'{key}\',this)">'
+            f'<span class="icon">{cfg["icon"]}</span><span>{cfg["label"]}</span></button>'
+        )
     return "\n".join(btns)
+
 
 HTML = f"""<!DOCTYPE html>
 <html lang="id">
@@ -429,127 +491,82 @@ HTML = f"""<!DOCTYPE html>
     --panel:  #08081a;
     --border: rgba(0,255,255,0.15);
     --dim:    rgba(255,255,255,0.25);
-    --neon:   #00ffff;    /* default, diupdate JS */
+    --neon:   #00ffff;
   }}
   *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
   body {{
-    background: var(--bg);
-    color: var(--neon);
+    background: var(--bg); color: var(--neon);
     font-family: 'Share Tech Mono', monospace;
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    height: 100vh; overflow: hidden;
+    display: flex; flex-direction: column;
   }}
-
-  /* Scanline */
   body::after {{
-    content: '';
-    position: fixed;
-    inset: 0;
+    content: ''; position: fixed; inset: 0;
     background: repeating-linear-gradient(0deg, transparent, transparent 2px,
       rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
-    pointer-events: none;
-    z-index: 9999;
+    pointer-events: none; z-index: 9999;
   }}
-
-  /* ── Header ── */
   header {{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 20px;
-    background: var(--panel);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 20px; background: var(--panel);
     border-bottom: 1px solid var(--neon);
     box-shadow: 0 0 18px color-mix(in srgb, var(--neon) 30%, transparent);
-    flex-shrink: 0;
-    z-index: 100;
-    transition: border-color 0.4s, box-shadow 0.4s;
+    flex-shrink: 0; z-index: 100; transition: border-color 0.4s, box-shadow 0.4s;
   }}
   .logo {{
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1rem;
-    font-weight: 900;
-    letter-spacing: 4px;
-    color: var(--neon);
-    transition: color 0.4s;
+    font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 900;
+    letter-spacing: 4px; color: var(--neon); transition: color 0.4s;
   }}
   .logo em {{ font-style: normal; color: var(--dim); font-size: 0.65rem; margin-left: 10px; letter-spacing: 2px; }}
   .hud-right {{ display: flex; align-items: center; gap: 20px; font-size: 0.68rem; letter-spacing: 1px; color: var(--dim); }}
   .pulse {{
     display: inline-block; width: 7px; height: 7px; border-radius: 50%;
     background: var(--neon); box-shadow: 0 0 8px var(--neon);
-    margin-right: 6px; animation: blink 1.4s infinite;
-    transition: background 0.4s, box-shadow 0.4s;
+    margin-right: 6px; animation: blink 1.4s infinite; transition: background 0.4s, box-shadow 0.4s;
   }}
   @keyframes blink {{ 0%,100%{{opacity:1}} 50%{{opacity:0.15}} }}
-
-  /* ── Layout ── */
   .main {{ display: flex; flex: 1; overflow: hidden; }}
-
-  /* ── Sidebar ── */
   aside {{
-    width: 256px; flex-shrink: 0;
-    background: var(--panel);
+    width: 256px; flex-shrink: 0; background: var(--panel);
     border-right: 1px solid var(--border);
-    display: flex; flex-direction: column;
-    overflow-y: auto; padding: 14px 10px;
-    gap: 0;
+    display: flex; flex-direction: column; overflow-y: auto; padding: 14px 10px; gap: 0;
   }}
   aside::-webkit-scrollbar {{ width: 3px; }}
-  aside::-webkit-scrollbar-thumb {{ background: var(--neon); border-radius: 2px; transition: background 0.4s; }}
-
-  .sec {{ font-size: 0.58rem; letter-spacing: 3px; color: rgba(255,255,255,0.2);
-          text-transform: uppercase; padding: 4px 4px 6px; }}
-
-  /* Layer buttons */
+  aside::-webkit-scrollbar-thumb {{ background: var(--neon); border-radius: 2px; }}
+  .sec {{
+    font-size: 0.58rem; letter-spacing: 3px; color: rgba(255,255,255,0.2);
+    text-transform: uppercase; padding: 4px 4px 6px;
+  }}
   .layer-btn {{
     display: flex; align-items: center; gap: 10px;
     padding: 9px 10px; margin-bottom: 5px;
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.06);
-    color: rgba(255,255,255,0.45);
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.72rem; letter-spacing: 1px;
-    cursor: pointer; text-align: left;
-    transition: all 0.25s;
-    position: relative;
+    background: transparent; border: 1px solid rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.45); font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem; letter-spacing: 1px; cursor: pointer; text-align: left;
+    transition: all 0.25s; position: relative;
   }}
-  /* neon left bar */
   .layer-btn::before {{
-    content: '';
-    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-    background: transparent;
-    transition: background 0.25s, box-shadow 0.25s;
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: transparent; transition: background 0.25s, box-shadow 0.25s;
   }}
   .layer-btn.active, .layer-btn:hover {{
-    border-color: var(--neon);
-    color: var(--neon);
+    border-color: var(--neon); color: var(--neon);
     background: color-mix(in srgb, var(--neon) 6%, transparent);
   }}
   .layer-btn.active::before, .layer-btn:hover::before {{
-    background: var(--neon);
-    box-shadow: 0 0 8px var(--neon);
+    background: var(--neon); box-shadow: 0 0 8px var(--neon);
   }}
-
   hr.div {{ border: none; border-top: 1px solid var(--border); margin: 12px 0; }}
-
-  /* Stats */
   .stats-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }}
   .stat-card {{
     background: #0c0c22; border: 1px solid var(--border);
-    padding: 9px 6px; text-align: center;
-    transition: border-color 0.4s;
+    padding: 9px 6px; text-align: center; transition: border-color 0.4s;
   }}
   .stat-lbl {{ font-size: 0.56rem; letter-spacing: 2px; color: rgba(255,255,255,0.25); text-transform: uppercase; margin-bottom: 4px; }}
   .stat-val {{
     font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: 700;
-    color: var(--neon); text-shadow: 0 0 10px var(--neon);
-    transition: color 0.4s, text-shadow 0.4s;
+    color: var(--neon); text-shadow: 0 0 10px var(--neon); transition: color 0.4s, text-shadow 0.4s;
   }}
-
-  /* Top table */
   .top-table {{ width: 100%; border-collapse: collapse; font-size: 0.7rem; }}
   .top-table th {{
     font-size: 0.57rem; letter-spacing: 2px; color: rgba(255,255,255,0.2);
@@ -557,21 +574,16 @@ HTML = f"""<!DOCTYPE html>
     border-bottom: 1px solid var(--border); text-align: left;
   }}
   .top-table td {{ padding: 5px 5px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(255,255,255,0.6); }}
-  .top-table .td-val {{ color: var(--neon); text-align: right; font-family: 'Orbitron', sans-serif; font-size: 0.65rem; transition: color 0.4s; }}
+  .top-table .td-val {{ color: var(--neon); text-align: right; font-family: 'Orbitron', sans-serif; font-size: 0.65rem; }}
   .top-table tr:hover td {{ background: color-mix(in srgb, var(--neon) 4%, transparent); }}
   .rank {{ color: rgba(255,255,255,0.2); }}
-
-  /* ── Map area ── */
   .map-wrap {{ flex: 1; position: relative; display: flex; flex-direction: column; }}
   #map-frame {{ flex: 1; border: none; display: block; }}
-
-  /* Corner brackets */
   .c {{ position: absolute; width: 18px; height: 18px; pointer-events: none; z-index: 10; transition: border-color 0.4s, box-shadow 0.4s; }}
   .c-tl {{ top:6px; left:6px; border-top:2px solid var(--neon); border-left:2px solid var(--neon); box-shadow:-1px -1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }}
   .c-tr {{ top:6px; right:6px; border-top:2px solid var(--neon); border-right:2px solid var(--neon); box-shadow:1px -1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }}
   .c-bl {{ bottom:6px; left:6px; border-bottom:2px solid var(--neon); border-left:2px solid var(--neon); box-shadow:-1px 1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }}
   .c-br {{ bottom:6px; right:6px; border-bottom:2px solid var(--neon); border-right:2px solid var(--neon); box-shadow:1px 1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }}
-
   .warn {{
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
     font-size: 0.6rem; letter-spacing: 2px;
@@ -579,8 +591,6 @@ HTML = f"""<!DOCTYPE html>
   }}
   .warn-dummy {{ background: rgba(255,255,0,0.06); border: 1px solid rgba(255,255,0,0.3); color: #ffff00; }}
   .warn-live  {{ background: rgba(0,255,65,0.06);  border: 1px solid rgba(0,255,65,0.3);  color: #00ff41; }}
-
-  /* Sentimen bar */
   .sent-row {{ display:flex; align-items:center; gap:6px; margin-bottom:5px; font-size:0.67rem; }}
   .sent-label {{ width:52px; color:rgba(255,255,255,0.4); }}
   .sent-bar {{ flex:1; height:6px; background:#0d0d2a; border-radius:2px; overflow:hidden; }}
@@ -590,11 +600,8 @@ HTML = f"""<!DOCTYPE html>
     position: absolute; bottom: 16px; right: 16px;
     background: rgba(8,8,26,0.85); border: 1px solid var(--border);
     font-size: 0.6rem; letter-spacing: 2px; color: rgba(255,255,255,0.2);
-    padding: 5px 12px; z-index: 10; pointer-events: none;
-    backdrop-filter: blur(4px);
+    padding: 5px 12px; z-index: 10; pointer-events: none; backdrop-filter: blur(4px);
   }}
-
-  /* Filter waktu */
   .tf-btn {{
     padding: 4px 8px; font-family: 'Share Tech Mono', monospace;
     font-size: 0.63rem; letter-spacing: 1px; cursor: pointer;
@@ -605,8 +612,6 @@ HTML = f"""<!DOCTYPE html>
     background: color-mix(in srgb, var(--neon) 12%, transparent);
     border-color: var(--neon); color: var(--neon);
   }}
-
-  /* Mobile responsive */
   @media (max-width: 700px) {{
     aside {{ width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--border); }}
     .main {{ flex-direction: column; }}
@@ -648,9 +653,7 @@ HTML = f"""<!DOCTYPE html>
       <div class="stat-card"><div class="stat-lbl">TERTINGGI</div><div class="stat-val" id="s-max">—</div></div>
       <div class="stat-card"><div class="stat-lbl">TERENDAH</div><div class="stat-val" id="s-min">—</div></div>
     </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">
-      Top 5 (estimasi BPS):
-    </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">Top 5 (estimasi BPS):</div>
     <table class="top-table">
       <thead><tr><th>#</th><th>WILAYAH</th><th>EST.</th></tr></thead>
       <tbody id="top-body"></tbody>
@@ -670,9 +673,7 @@ HTML = f"""<!DOCTYPE html>
         <div class="stat-val" id="n-total" style="font-size:1.1rem">—</div>
       </div>
     </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">
-      Top 5 provinsi (dari berita):
-    </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">Top 5 provinsi (dari berita):</div>
     <table class="top-table">
       <thead><tr><th>#</th><th>WILAYAH</th><th>BERITA</th></tr></thead>
       <tbody id="news-top-body"></tbody>
@@ -692,15 +693,7 @@ HTML = f"""<!DOCTYPE html>
           cursor:pointer;width:100%;text-align:left;">
         &#9646; SEMUA JENIS
       </button>
-      {''.join(f"""<button class="crime-btn" data-jenis="{j}"
-          onclick="switchCrimeType('{j}',this)"
-          style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;
-            background:transparent;border:1px solid rgba(255,255,255,0.07);
-            color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;
-            font-size:0.68rem;cursor:pointer;width:100%;text-align:left;
-            transition:all 0.2s;" data-neon="{cfg['neon']}">
-          &#9656; {cfg['label']}
-        </button>""" for j, cfg in CRIME_TYPES.items())}
+      {render_crime_type_buttons()}
     </div>
 
     <hr class="div"/>
@@ -712,14 +705,12 @@ HTML = f"""<!DOCTYPE html>
         &nbsp;kejadian terdeteksi
       </span>
     </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">
-      Filter rentang waktu:
-    </div>
+    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">Filter rentang waktu:</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;padding:0 2px 6px;">
-      <button class="tf-btn"        data-days="7"   onclick="setTimeFilter(7,this)">7H</button>
-      <button class="tf-btn"        data-days="30"  onclick="setTimeFilter(30,this)">30H</button>
-      <button class="tf-btn"        data-days="90"  onclick="setTimeFilter(90,this)">90H</button>
-      <button class="tf-btn active" data-days="0"   onclick="setTimeFilter(0,this)">SEMUA</button>
+      <button class="tf-btn"        data-days="7"  onclick="setTimeFilter(7,this)">7H</button>
+      <button class="tf-btn"        data-days="30" onclick="setTimeFilter(30,this)">30H</button>
+      <button class="tf-btn"        data-days="90" onclick="setTimeFilter(90,this)">90H</button>
+      <button class="tf-btn active" data-days="0"  onclick="setTimeFilter(0,this)">SEMUA</button>
     </div>
     <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 6px;">
       Klik titik di peta untuk detail berita
@@ -743,28 +734,38 @@ HTML = f"""<!DOCTYPE html>
   </aside>
 
   <div class="map-wrap">
-    <div class="c c-tl"></div>
-    <div class="c c-tr"></div>
-    <div class="c c-bl"></div>
-    <div class="c c-br"></div>
+    <div class="c c-tl"></div><div class="c c-tr"></div>
+    <div class="c c-bl"></div><div class="c c-br"></div>
     <div class="warn {data_badge_cls}">&#9888; {data_badge}</div>
-    <iframe id="map-frame" src="about:blank"></iframe>
+    <iframe id="map-frame" src="maps/kriminalitas.html"></iframe>
     <div class="hud-br">WGS84 · EPSG:4326 · &copy; NEXUS MAP SYS</div>
   </div>
 </div>
 
 <script>
-const MAPS            = {maps_json};
-const CRIME_TYPE_MAPS = {crime_type_maps_json};
 const CRIME_TYPE_STATS = {crime_type_stats_json};
 const STATS      = {stats_json};
 const NEWS_STATS = {news_stats_json};
 const LAYERS     = {layers_json};
 const SENTIMEN   = {sentimen_json};
 const ARTICLES   = {articles_json};
-const NEON_MAP   = {json.dumps(_NEON_MAP)};
-let blobUrl    = null;
-let currentLayer = 'kriminalitas';
+
+let currentKey  = 'kriminalitas';
+let currentDays = 0;
+
+// Terima markerCount dari iframe
+window.addEventListener('message', function(e) {{
+  if (e.data && e.data.type === 'markerCount') {{
+    document.getElementById('marker-count').textContent =
+      Number(e.data.count).toLocaleString('id-ID');
+  }}
+}});
+
+function _sendFilter(days) {{
+  try {{
+    document.getElementById('map-frame').contentWindow.postMessage({{days: days}}, '*');
+  }} catch(e) {{}}
+}}
 
 function updateSentimen(key) {{
   const s   = SENTIMEN[key] || {{}};
@@ -772,7 +773,6 @@ function updateSentimen(key) {{
   const net = s['netral']  || 0;
   const pos = s['positif'] || 0;
   const total = neg + net + pos || 1;
-
   document.getElementById('sent-neg').style.width   = (neg/total*100) + '%';
   document.getElementById('sent-net').style.width   = (net/total*100) + '%';
   document.getElementById('sent-pos').style.width   = (pos/total*100) + '%';
@@ -781,75 +781,43 @@ function updateSentimen(key) {{
   document.getElementById('sent-pos-n').textContent = pos;
 }}
 
-function loadMap(html) {{
-  if (blobUrl) URL.revokeObjectURL(blobUrl);
-  blobUrl = URL.createObjectURL(new Blob([html], {{type:'text/html'}}));
-  document.getElementById('map-frame').src = blobUrl;
-}}
-
 function updateStats(s, neon, key) {{
   if (neon) document.documentElement.style.setProperty('--neon', neon);
   document.getElementById('s-total').textContent = (s.total||0).toLocaleString('id-ID');
   document.getElementById('s-avg').textContent   = (s.avg||0).toLocaleString('id-ID');
   document.getElementById('s-max').textContent   = (s.max||0).toLocaleString('id-ID');
   document.getElementById('s-min').textContent   = (s.min||0).toLocaleString('id-ID');
-  document.getElementById('top-body').innerHTML  = (s.top||[]).map(([w,k],i)=>
+  document.getElementById('top-body').innerHTML  = (s.top||[]).map(([w,k],i) =>
     `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
      <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
   ).join('');
-
-  // Panel data nyata dari berita
   if (key && NEWS_STATS[key]) {{
     const ns = NEWS_STATS[key];
     document.getElementById('n-total').textContent = (ns.total||0).toLocaleString('id-ID');
-    document.getElementById('news-top-body').innerHTML = (ns.top||[]).map(([w,k],i)=>
+    document.getElementById('news-top-body').innerHTML = (ns.top||[]).map(([w,k],i) =>
       `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
        <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
     ).join('') || '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
   }}
 }}
 
-function switchCrimeType(jenis, btn) {{
-  document.querySelectorAll('.crime-btn').forEach(b => {{
-    b.style.background = 'transparent';
-    b.style.borderColor = 'rgba(255,255,255,0.07)';
-    b.style.color = 'rgba(255,255,255,0.4)';
-  }});
-  const neon = btn.dataset.neon || LAYERS['kriminalitas'].neon;
-  btn.style.background = `color-mix(in srgb,${{neon}} 10%,transparent)`;
-  btn.style.borderColor = neon;
-  btn.style.color = neon;
-
-  if (!jenis) {{
-    updateStats(STATS['kriminalitas'], LAYERS['kriminalitas'].neon, 'kriminalitas');
-    document.documentElement.style.setProperty('--neon', LAYERS['kriminalitas'].neon);
-    buildMapWithFilter('kriminalitas', currentDays);
-  }} else {{
-    const s = CRIME_TYPE_STATS[jenis] || {{}};
-    updateStats(s, s.neon || neon, null);
-    if (blobUrl) URL.revokeObjectURL(blobUrl);
-    blobUrl = URL.createObjectURL(new Blob([CRIME_TYPE_MAPS[jenis]||''], {{type:'text/html'}}));
-    document.getElementById('map-frame').src = blobUrl;
-  }}
+function _loadMap(src) {{
+  const frame = document.getElementById('map-frame');
+  frame.onload = function() {{ _sendFilter(currentDays); }};
+  frame.src = src;
 }}
 
 function switchLayer(key, btn) {{
   currentKey = key;
   const neon = LAYERS[key].neon;
   document.documentElement.style.setProperty('--neon', neon);
-
   document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-
   const crimePanel = document.getElementById('crime-type-panel');
   if (crimePanel) crimePanel.style.display = key === 'kriminalitas' ? 'block' : 'none';
-
-  const s = STATS[key];
-  updateStats(s, neon, key);
+  updateStats(STATS[key], neon, key);
   updateSentimen(key);
-
-  buildMapWithFilter(key, currentDays);
-
+  _loadMap('maps/' + key + '.html');
   if (key === 'kriminalitas') {{
     const firstCrimeBtn = document.querySelector('.crime-btn');
     if (firstCrimeBtn) {{
@@ -865,15 +833,42 @@ function switchLayer(key, btn) {{
   }}
 }}
 
-// ── Jam digital ──
+function setTimeFilter(days, btn) {{
+  currentDays = days;
+  document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _sendFilter(days);
+}}
+
+function switchCrimeType(jenis, btn) {{
+  document.querySelectorAll('.crime-btn').forEach(b => {{
+    b.style.background = 'transparent';
+    b.style.borderColor = 'rgba(255,255,255,0.07)';
+    b.style.color = 'rgba(255,255,255,0.4)';
+  }});
+  const neon = btn.dataset.neon || LAYERS['kriminalitas'].neon;
+  btn.style.background = `color-mix(in srgb,${{neon}} 10%,transparent)`;
+  btn.style.borderColor = neon;
+  btn.style.color = neon;
+  if (!jenis) {{
+    updateStats(STATS['kriminalitas'], LAYERS['kriminalitas'].neon, 'kriminalitas');
+    document.documentElement.style.setProperty('--neon', LAYERS['kriminalitas'].neon);
+    _loadMap('maps/kriminalitas.html');
+  }} else {{
+    const s = CRIME_TYPE_STATS[jenis] || {{}};
+    updateStats(s, s.neon || neon, null);
+    _loadMap('maps/crime_' + jenis + '.html');
+  }}
+}}
+
+// Jam digital
 setInterval(() => {{
   document.getElementById('clk').textContent =
-    new Date().toLocaleTimeString('id-ID', {{hour12:false}});
+    new Date().toLocaleTimeString('id-ID', {{hour12: false}});
 }}, 1000);
 
-// ── Status sistem berdasarkan usia data ──
+// Status sistem berdasarkan usia data
 const SCRAPED_AT = "{scraped_at_iso}";
-
 function updateSystemStatus() {{
   const label = document.getElementById('sys-label');
   const pulse = document.getElementById('sys-pulse');
@@ -885,15 +880,10 @@ function updateSystemStatus() {{
     ageEl.textContent = '—';
     return;
   }}
-
   const scraped = new Date(SCRAPED_AT);
-  const now     = new Date();
-  const diffMs  = now - scraped;
-  const diffMin = Math.floor(diffMs / 60000);
-  const diffHr  = Math.floor(diffMin / 60);
+  const diffHr  = Math.floor((Date.now() - scraped) / 3600000);
+  const diffMin = Math.floor((Date.now() - scraped) / 60000);
   const diffDay = Math.floor(diffHr / 24);
-
-  // Format usia data
   let ageStr;
   if (diffMin < 1)       ageStr = 'BARU SAJA';
   else if (diffMin < 60) ageStr = diffMin + ' MNT LALU';
@@ -901,142 +891,22 @@ function updateSystemStatus() {{
   else                   ageStr = diffDay + ' HARI LALU';
   ageEl.textContent = ageStr;
   ageEl.title = 'Scraping: ' + scraped.toLocaleString('id-ID');
-
-  // Status & warna
   if (diffHr < 6) {{
     label.textContent = 'SYSTEM ONLINE';
-    pulse.style.background = '#00ff41';
-    pulse.style.boxShadow  = '0 0 8px #00ff41';
-    label.style.color      = '#00ff41';
+    pulse.style.background = '#00ff41'; pulse.style.boxShadow = '0 0 8px #00ff41';
+    label.style.color = '#00ff41';
   }} else if (diffHr < 24) {{
     label.textContent = 'DATA PERLU REFRESH';
-    pulse.style.background = '#ffaa00';
-    pulse.style.boxShadow  = '0 0 8px #ffaa00';
-    label.style.color      = '#ffaa00';
-    pulse.style.animationDuration = '0.7s';
+    pulse.style.background = '#ffaa00'; pulse.style.boxShadow = '0 0 8px #ffaa00';
+    label.style.color = '#ffaa00'; pulse.style.animationDuration = '0.7s';
   }} else {{
     label.textContent = 'DATA USANG';
-    pulse.style.background = '#ff4444';
-    pulse.style.boxShadow  = '0 0 8px #ff4444';
-    label.style.color      = '#ff4444';
-    pulse.style.animationDuration = '0.3s';
+    pulse.style.background = '#ff4444'; pulse.style.boxShadow = '0 0 8px #ff4444';
+    label.style.color = '#ff4444'; pulse.style.animationDuration = '0.3s';
   }}
 }}
-
-// Update status setiap menit
 updateSystemStatus();
 setInterval(updateSystemStatus, 60000);
-
-// ── Filter waktu & rebuild peta dengan marker ──
-let currentDays = 0;   // default: semua artikel
-let currentKey  = 'kriminalitas';
-
-function parseArticleDate(tanggal) {{
-  if (!tanggal) return null;
-  try {{ return new Date(tanggal); }} catch(e) {{ return null; }}
-}}
-
-function buildMapWithFilter(key, days) {{
-  const neon   = LAYERS[key] ? LAYERS[key].neon : NEON_MAP[key] || '#00ffff';
-  const cutoff = days > 0 ? new Date(Date.now() - days * 86400000) : null;
-
-  const filtered = ARTICLES.filter(a => {{
-    if (a.kategori !== key) return false;
-    if (!a.lat || !a.lon)  return false;
-    if (cutoff) {{
-      const d = parseArticleDate(a.tanggal);
-      if (d && d < cutoff) return false;
-    }}
-    return true;
-  }});
-
-  document.getElementById('marker-count').textContent =
-    filtered.length.toLocaleString('id-ID');
-
-  const baseHtml = MAPS[key] || '';
-
-  // Cari nama variabel peta Folium langsung dari HTML (mis. map_a3f2b1...)
-  // Ini jauh lebih reliable daripada scan semua properti window
-  const mvMatch = baseHtml.match(/var\\s+(map_[a-zA-Z0-9_]+)\\s*=/);
-  const mapVarName = mvMatch ? mvMatch[1] : '';
-
-  // Semua data artikel diserialisasi ke JSON di sini (Python sudah escape dengan benar)
-  const articlesJson = JSON.stringify(filtered);
-
-  // Script dibangun sebagai string biasa — bukan template literal —
-  // agar tidak ada konflik antara backtick Folium dan karakter khusus
-  const sc = [
-    '(function(){{',
-    '  var _neon="' + neon + '";',
-    '  var _mvn="' + mapVarName + '";',
-    '  var _arts=' + articlesJson + ';',
-    '  function esc(s){{',
-    '    s=String(s||"");',
-    '    s=s.replace(/&/g,"&amp;");',
-    '    s=s.replace(/[<]/g,"&lt;");',
-    '    s=s.replace(/[>]/g,"&gt;");',
-    '    s=s.replace(/"/g,"&quot;");',
-    '    s=s.replace(/\'/g,"&#39;");',
-    '    return s;',
-    '  }}',
-    '  function addMarkers(lmap){{',
-    '    if(!lmap||!lmap.addLayer)return;',
-    '    var layer=L.layerGroup().addTo(lmap);',
-    '    _arts.forEach(function(a){{',
-    '      if(!a.lat||!a.lon)return;',
-    '      var mk=L.circleMarker([a.lat,a.lon],{{radius:7,color:_neon,fillColor:_neon,fillOpacity:0.85,weight:2}});',
-    '      var jd=esc(String(a.judul||"").slice(0,120));',
-    '      var ds=esc(String(a.deskripsi||"").slice(0,200));',
-    '      var tg=esc(String(a.tanggal||"").slice(0,16));',
-    '      var sr=esc(String(a.sumber||""));',
-    '      var kb=esc(String(a.kabupaten||""));',
-    '      var ur=String(a.url||"#");',
-    '      var mt=tg+(sr?" | "+sr:"")+(kb?" | "+kb:"");',
-    '      var pop=',
-    '        \'<div style="background:#0a0a1f;color:\'+_neon+\';font-family:monospace;font-size:12px;\'',
-    '        +\'border:1px solid \'+_neon+\';padding:10px;max-width:280px;box-shadow:0 0 12px \'+_neon+\'55;">\'',
-    '        +\'<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;\'',
-    '        +\'border-bottom:1px solid \'+_neon+\'44;padding-bottom:4px;">\'+jd+\'</div>\'',
-    '        +\'<div style="color:\'+_neon+\'99;font-size:11px;margin-bottom:6px;">\'+ds+\'</div>\'',
-    '        +\'<div style="font-size:10px;color:\'+_neon+\'66;margin-bottom:8px;">\'+mt+\'</div>\'',
-    '        +\'<a href="\'+ur+\'" target="_blank" style="color:\'+_neon+\';text-decoration:none;\'',
-    '        +\'font-size:11px;border:1px solid \'+_neon+\';padding:2px 8px;">BACA &#8594;</a></div>\';',
-    '      mk.bindPopup(pop,{{maxWidth:300}});',
-    '      mk.bindTooltip(esc(String(a.judul||"").slice(0,60)));',
-    '      layer.addLayer(mk);',
-    '    }});',
-    '  }}',
-    '  function getMap(){{',
-    '    if(_mvn&&window[_mvn]&&window[_mvn].addLayer)return window[_mvn];',
-    '    var keys=Object.keys(window);',
-    '    for(var i=0;i<keys.length;i++){{',
-    '      try{{var v=window[keys[i]];',
-    '        if(v&&v._leaflet_id!=null&&typeof v.addLayer==="function")return v;',
-    '      }}catch(e){{}}',
-    '    }}',
-    '    return null;',
-    '  }}',
-    '  var _t=0;',
-    '  function run(){{var m=getMap();if(m){{addMarkers(m);return;}}if(++_t<30)setTimeout(run,200);}}',
-    '  run();',
-    '}})();',
-  ].join('\\n');
-
-  // Gabungkan script ke dalam blob HTML Folium
-  const scTag = '<scr' + 'ipt>' + sc + '<' + '/scr' + 'ipt>';
-  const fullHtml = baseHtml.replace('</body>', scTag + '</body>');
-
-  if (blobUrl) URL.revokeObjectURL(blobUrl);
-  blobUrl = URL.createObjectURL(new Blob([fullHtml], {{type:'text/html'}}));
-  document.getElementById('map-frame').src = blobUrl;
-}}
-
-function setTimeFilter(days, btn) {{
-  document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  currentDays = days;
-  buildMapWithFilter(currentKey, days);
-}}
 
 document.addEventListener('DOMContentLoaded', () => {{
   const firstBtn = document.querySelector('.layer-btn');
@@ -1049,4 +919,5 @@ document.addEventListener('DOMContentLoaded', () => {{
 
 out = DOCS_DIR / "index.html"
 out.write_text(HTML, encoding="utf-8")
-print(f"OK Peta disimpan di {out}")
+print(f"\nOK index.html disimpan ({len(HTML)//1024} KB) -> {out}")
+print(f"OK {len(list(MAPS_DIR.glob('*.html')))} file peta di {MAPS_DIR}")
