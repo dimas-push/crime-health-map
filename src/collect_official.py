@@ -334,6 +334,27 @@ def collect_crime_detail() -> pd.DataFrame:
     return df_detail
 
 
+def collect_kecelakaan_lalin() -> pd.DataFrame:
+    """Load data kecelakaan lalu lintas dari CSV statis."""
+    path = RAW_DIR / "kecelakaan_lalin.csv"
+    if path.exists():
+        df = pd.read_csv(path)
+        print(f"[collect_official] Kecelakaan lalin: {len(df)} baris dari CSV.")
+        return df
+    # Fallback minimal jika file belum ada
+    return pd.DataFrame()
+
+
+def collect_stunting() -> pd.DataFrame:
+    """Load data stunting dari CSV statis (SSGI Kemenkes)."""
+    path = RAW_DIR / "stunting.csv"
+    if path.exists():
+        df = pd.read_csv(path)
+        print(f"[collect_official] Stunting: {len(df)} baris dari CSV.")
+        return df
+    return pd.DataFrame()
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -343,10 +364,12 @@ def collect_all() -> dict[str, pd.DataFrame]:
     print("=" * 50)
 
     results = {
-        "kriminalitas":      collect_kriminalitas(),
-        "penyakit_menular":  collect_penyakit_menular(),
-        "kekerasan_seksual": collect_kekerasan_seksual(),
+        "kriminalitas":        collect_kriminalitas(),
+        "penyakit_menular":    collect_penyakit_menular(),
+        "kekerasan_seksual":   collect_kekerasan_seksual(),
         "kriminalitas_detail": collect_crime_detail(),
+        "kecelakaan_lalin":    collect_kecelakaan_lalin(),
+        "stunting":            collect_stunting(),
     }
 
     print("\n[collect_official] Selesai. Ringkasan:")

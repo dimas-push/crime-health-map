@@ -108,18 +108,35 @@ LAYERS = {
         "icon":   "&#9888;",
         "neon":   "#ff6b35",
         "colors": ["#0d0015", "#3d0020", "#8b0000", "#cc3300", "#ff6b35"],
+        "col":    "jumlah_kasus",
     },
     "kekerasan_seksual": {
         "label":  "KEKERASAN SEKSUAL",
         "icon":   "&#128737;",
         "neon":   "#ff00ff",
         "colors": ["#0d001a", "#2d0040", "#7700aa", "#cc00cc", "#ff00ff"],
+        "col":    "jumlah_kasus",
     },
     "penyakit_menular": {
         "label":  "PENYAKIT MENULAR",
         "icon":   "&#9877;",
         "neon":   "#00ff41",
         "colors": ["#001a0d", "#003320", "#006600", "#00bb33", "#00ff41"],
+        "col":    "jumlah_kasus",
+    },
+    "kecelakaan_lalin": {
+        "label":  "KECELAKAAN LALIN",
+        "icon":   "&#128664;",
+        "neon":   "#ffcc00",
+        "colors": ["#0d0a00", "#2d2200", "#665500", "#ccaa00", "#ffcc00"],
+        "col":    "jumlah_kecelakaan",
+    },
+    "stunting": {
+        "label":  "STUNTING/GIZI BURUK",
+        "icon":   "&#129657;",
+        "neon":   "#00ccff",
+        "colors": ["#000d1a", "#001f40", "#004488", "#0088cc", "#00ccff"],
+        "col":    "jumlah_balita_stunting",
     },
 }
 
@@ -141,13 +158,44 @@ print("Memuat GeoDataFrame provinsi ...")
 gdf    = load_geodataframe("provinsi")
 id_col = _ID_COLUMNS["provinsi"]
 
-df_final        = load_or_build_data()
+df_final         = load_or_build_data()
 sentimen_summary = load_sentiment_summary()
 df_articles      = load_articles()
 df_crime_detail  = load_crime_detail()
+
+# Load sentimen per artikel
+def _load_sentiment_df() -> pd.DataFrame:
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql(
+                "SELECT tweet_id, sentimen, sentimen_score FROM data_sentimen", conn
+            )
+        except Exception:
+            return pd.DataFrame()
+
+df_sentiment = _load_sentiment_df()
 IS_DUMMY = not (PROCESSED_DIR / "final.csv").exists()
 
-# Pivot data per kategori
+# Load dataset tambahan
+RAW_DIR = Path(__file__).parent / "data" / "raw"
+
+def _load_extra_csv(filename: str, val_col: str, prov_col: str = "nama_provinsi") -> pd.Series:
+    path = RAW_DIR / filename
+    if not path.exists():
+        return pd.Series(dtype=float)
+    df = pd.read_csv(path)
+    if val_col not in df.columns or prov_col not in df.columns:
+        return pd.Series(dtype=float)
+    return df.set_index(prov_col)[val_col]
+
+_extra_data = {
+    "kecelakaan_lalin": _load_extra_csv("kecelakaan_lalin.csv", "jumlah_kecelakaan"),
+    "stunting":         _load_extra_csv("stunting.csv", "jumlah_balita_stunting"),
+}
+
+# Pivot data per kategori (3 kategori utama dari df_final, 2 dari CSV terpisah)
 def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
     return (
         df[df["kategori"] == kategori]
@@ -156,8 +204,11 @@ def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
     )
 
 data = pd.DataFrame({"id_wilayah": gdf[id_col]})
-for kat in LAYERS:
+_BASE_LAYERS = ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]
+for kat in _BASE_LAYERS:
     data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
+for kat in ["kecelakaan_lalin", "stunting"]:
+    data[kat] = data["id_wilayah"].map(_extra_data[kat]).fillna(0).astype(int)
 
 # Statistik artikel berita per layer
 def _news_stats(kategori: str) -> dict:
@@ -232,9 +283,15 @@ def _articles_for(kategori: str) -> list[dict]:
         return []
     cols = ["judul", "deskripsi", "url", "tanggal", "sumber",
             "kategori", "provinsi", "kabupaten", "lat", "lon"]
-    sub = df_articles[df_articles["kategori"] == kategori]
-    existing = [c for c in cols if c in sub.columns]
-    return sub[existing].to_dict(orient="records")
+    sub = df_articles[df_articles["kategori"] == kategori].copy()
+    # Merge sentimen jika ada
+    if not df_sentiment.empty:
+        sub = sub.merge(
+            df_sentiment[["tweet_id", "sentimen", "sentimen_score"]],
+            left_index=True, right_on="tweet_id", how="left"
+        ) if "tweet_id" in df_sentiment.columns else sub
+    existing = [c for c in cols + ["sentimen"] if c in sub.columns]
+    return sub[existing].fillna("").to_dict(orient="records")
 
 
 def _inject_markers(html: str, articles: list[dict], neon: str,
@@ -359,7 +416,8 @@ def _inject_markers(html: str, articles: list[dict], neon: str,
 
 
 def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
-                     colormap: cm.LinearColormap) -> folium.Map:
+                     colormap: cm.LinearColormap,
+                     tooltip_alias: str = "Kasus") -> folium.Map:
     """Buat Folium Map dengan choropleth dan tooltip."""
     m = folium.Map(location=[-2.5, 118.0], zoom_start=5, tiles=None, zoom_control=False)
     folium.TileLayer(
@@ -380,7 +438,7 @@ def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
         },
         tooltip=folium.GeoJsonTooltip(
             fields=[id_col, value_col],
-            aliases=["Wilayah", "Kasus"],
+            aliases=["Wilayah", tooltip_alias],
             style=(
                 f"background:#0a0a1f;color:{neon};"
                 f"font-family:'Share Tech Mono',monospace;font-size:12px;"
@@ -391,24 +449,34 @@ def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
     return m
 
 
+_TOOLTIP_ALIAS = {
+    "kriminalitas":     "Kasus",
+    "kekerasan_seksual":"Kasus",
+    "penyakit_menular": "Kasus",
+    "kecelakaan_lalin": "Kecelakaan",
+    "stunting":         "Balita Stunting",
+}
+
+
 def make_map(key: str) -> None:
     """Buat peta choropleth per layer utama, simpan ke docs/maps/{key}.html."""
     cfg    = LAYERS[key]
     neon   = cfg["neon"]
     values = data[key]
     colormap = cm.LinearColormap(
-        colors=cfg["colors"], vmin=values.min(), vmax=values.max(),
+        colors=cfg["colors"], vmin=values.min(), vmax=max(values.max(), 1),
     )
     import json as _json
     merged = gdf.merge(data[["id_wilayah", key]], left_on=id_col, right_on="id_wilayah", how="left")
     geojson_data = _json.loads(merged.to_json())
 
-    m = _make_folium_map(neon, geojson_data, key, colormap)
+    tip = _TOOLTIP_ALIAS.get(key, "Kasus")
+    m = _make_folium_map(neon, geojson_data, key, colormap, tooltip_alias=tip)
     html = m.get_root().render()
     html = _inject_markers(html, _articles_for(key), neon,
                            colors=cfg["colors"],
-                           vmin=float(values.min()), vmax=float(values.max()),
-                           label="Kasus")
+                           vmin=float(values.min()), vmax=float(max(values.max(), 1)),
+                           label=tip)
     (MAPS_DIR / f"{key}.html").write_text(html, encoding="utf-8")
     print(f"  [map] {key}.html disimpan ({len(html)//1024} KB)")
 
@@ -445,7 +513,7 @@ def make_crime_type_map(jenis: str) -> None:
     merged = gdf.merge(col_data, left_on=id_col, right_on="id_wilayah", how="left")
     geojson_data = _json.loads(merged.to_json())
 
-    m = _make_folium_map(neon, geojson_data, jenis, colormap)
+    m = _make_folium_map(neon, geojson_data, jenis, colormap, tooltip_alias="Kasus")
     html = m.get_root().render()
     crime_colors = ["#0a0a1f", "#1a0800", "#551500", "#aa3300", neon]
     html = _inject_markers(html, [], neon,
@@ -707,10 +775,15 @@ HTML = f"""<!DOCTYPE html>
   .art-item-meta {{
     font-size: 0.6rem; color: rgba(255,255,255,0.3); margin-bottom: 6px;
   }}
+  .art-item-desc {{
+    font-size: 0.65rem; color: rgba(255,255,255,0.4); line-height: 1.5;
+    margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden;
+  }}
   .art-item-link {{
     font-size: 0.62rem; color: var(--neon); text-decoration: none;
     border: 1px solid var(--neon); padding: 2px 8px; display: inline-block;
-    transition: background 0.2s;
+    transition: background 0.2s; letter-spacing: 1px;
   }}
   .art-item-link:hover {{ background: color-mix(in srgb, var(--neon) 12%, transparent); }}
   @media (max-width: 700px) {{
@@ -848,11 +921,23 @@ HTML = f"""<!DOCTYPE html>
 <!-- Panel detail artikel per provinsi -->
 <div id="art-panel">
   <div id="art-panel-header">
-    <span id="art-panel-title">ARTIKEL</span>
-    <button id="art-panel-close" onclick="closeArtPanel()">&#10005; TUTUP</button>
+    <div>
+      <span id="art-panel-title">ARTIKEL</span>
+      <span id="art-panel-count" style="margin-left:8px;font-size:0.6rem;color:rgba(255,255,255,0.3);font-family:'Share Tech Mono',monospace;"></span>
+    </div>
+    <button id="art-panel-close" onclick="closeArtPanel()">&#10005;</button>
+  </div>
+  <div style="padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <input id="art-search" type="text" placeholder="Cari judul / sumber..."
+      oninput="filterArtPanel(this.value)"
+      style="width:100%;background:#0a0a22;border:1px solid var(--border);
+        color:var(--neon);font-family:'Share Tech Mono',monospace;font-size:0.68rem;
+        padding:5px 10px;outline:none;transition:border-color 0.2s;"
+      onfocus="this.style.borderColor='var(--neon)'"
+      onblur="this.style.borderColor='var(--border)'"/>
   </div>
   <div id="art-panel-list">
-    <div style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:20px 0;text-align:center;">
+    <div style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:30px 0;text-align:center;">
       Klik provinsi di peta untuk melihat berita terkait
     </div>
   </div>
@@ -881,25 +966,72 @@ window.addEventListener('message', function(e) {{
   }}
 }});
 
-function openArtPanel(provinsi, arts) {{
-  const panel = document.getElementById('art-panel');
-  const title = document.getElementById('art-panel-title');
-  const list  = document.getElementById('art-panel-list');
-  title.textContent = provinsi ? provinsi.toUpperCase() : 'ARTIKEL';
+const _KAT_COLOR = {{
+  kriminalitas:     '#ff6b35',
+  kekerasan_seksual:'#ff00ff',
+  penyakit_menular: '#00ff41',
+}};
+const _KAT_LABEL = {{
+  kriminalitas:     'KRIMINAL',
+  kekerasan_seksual:'KEK. SEKSUAL',
+  penyakit_menular: 'PENYAKIT',
+}};
+const _SENT_COLOR = {{ positif:'#00ff41', netral:'#888', negatif:'#ff4444' }};
+
+let _artPanelArts = [];
+
+function _renderArtItems(arts) {{
+  const list = document.getElementById('art-panel-list');
   if (!arts || arts.length === 0) {{
-    list.innerHTML = '<div style="color:rgba(255,255,255,0.25);font-size:0.65rem;padding:20px 0;text-align:center;">Tidak ada artikel terdeteksi untuk provinsi ini</div>';
-  }} else {{
-    list.innerHTML = arts.slice(0,30).map(a => {{
-      const meta = [a.tanggal ? a.tanggal.slice(0,10) : '', a.sumber || '', a.kabupaten || '']
-        .filter(Boolean).join(' · ');
-      return `<div class="art-item">
-        <div class="art-item-title">${{String(a.judul||'').slice(0,120)}}</div>
-        <div class="art-item-meta">${{meta}}</div>
-        ${{a.url ? `<a class="art-item-link" href="${{a.url}}" target="_blank">BACA &#8594;</a>` : ''}}
-      </div>`;
-    }}).join('');
+    list.innerHTML = '<div style="color:rgba(255,255,255,0.25);font-size:0.65rem;padding:30px 0;text-align:center;">Tidak ada artikel terdeteksi<br/>untuk wilayah ini</div>';
+    return;
   }}
+  list.innerHTML = arts.slice(0,50).map(a => {{
+    const kat   = a.kategori || '';
+    const sent  = a.sentimen || '';
+    const tgl   = a.tanggal ? a.tanggal.slice(0,10) : '';
+    const src   = a.sumber  || '';
+    const kab   = a.kabupaten || '';
+    const desk  = String(a.deskripsi||'').trim().slice(0,200);
+    const katClr  = _KAT_COLOR[kat]  || 'rgba(255,255,255,0.3)';
+    const katLbl  = _KAT_LABEL[kat]  || kat.toUpperCase();
+    const sentClr = _SENT_COLOR[sent] || 'rgba(255,255,255,0.2)';
+    const badges  = [
+      kat  ? `<span style="font-size:0.55rem;padding:1px 6px;border:1px solid ${{katClr}};color:${{katClr}};letter-spacing:1px;">${{katLbl}}</span>` : '',
+      sent ? `<span style="font-size:0.55rem;padding:1px 6px;border:1px solid ${{sentClr}};color:${{sentClr}};letter-spacing:1px;">${{sent.toUpperCase()}}</span>` : '',
+    ].filter(Boolean).join(' ');
+    const meta = [tgl, src, kab].filter(Boolean).join(' · ');
+    return `<div class="art-item">
+      ${{badges ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${{badges}}</div>` : ''}}
+      <div class="art-item-title">${{String(a.judul||'').slice(0,140)}}</div>
+      ${{desk ? `<div class="art-item-desc">${{desk}}</div>` : ''}}
+      <div class="art-item-meta">${{meta}}</div>
+      ${{a.url ? `<a class="art-item-link" href="${{a.url}}" target="_blank">BACA SELENGKAPNYA &#8594;</a>` : ''}}
+    </div>`;
+  }}).join('');
+}}
+
+function openArtPanel(provinsi, arts) {{
+  _artPanelArts = arts || [];
+  const panel   = document.getElementById('art-panel');
+  const title   = document.getElementById('art-panel-title');
+  const counter = document.getElementById('art-panel-count');
+  title.textContent = provinsi ? provinsi.toUpperCase() : 'ARTIKEL';
+  if (counter) counter.textContent = _artPanelArts.length + ' artikel';
+  const searchEl = document.getElementById('art-search');
+  if (searchEl) searchEl.value = '';
+  _renderArtItems(_artPanelArts);
   panel.classList.add('open');
+}}
+
+function filterArtPanel(q) {{
+  if (!q) {{ _renderArtItems(_artPanelArts); return; }}
+  const ql = q.toLowerCase();
+  _renderArtItems(_artPanelArts.filter(a =>
+    (a.judul||'').toLowerCase().includes(ql) ||
+    (a.deskripsi||'').toLowerCase().includes(ql) ||
+    (a.sumber||'').toLowerCase().includes(ql)
+  ));
 }}
 
 function closeArtPanel() {{

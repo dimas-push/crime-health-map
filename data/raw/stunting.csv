@@ -1,0 +1,35 @@
+nama_provinsi,prevalensi_stunting_pct,jumlah_balita_stunting,total_balita,tahun,sumber
+Aceh,31.2,87234,279600,2023,SSGI Kemenkes 2023
+Sumatera Utara,25.8,198432,768930,2023,SSGI Kemenkes 2023
+Sumatera Barat,23.4,98765,422065,2023,SSGI Kemenkes 2023
+Riau,17.9,87234,487342,2023,SSGI Kemenkes 2023
+Jambi,22.3,67890,304529,2023,SSGI Kemenkes 2023
+Sumatera Selatan,24.8,134567,542609,2023,SSGI Kemenkes 2023
+Bengkulu,22.1,43210,195520,2023,SSGI Kemenkes 2023
+Lampung,15.2,112345,739112,2023,SSGI Kemenkes 2023
+Kepulauan Bangka Belitung,18.3,27654,151115,2023,SSGI Kemenkes 2023
+Kepulauan Riau,16.5,34567,209497,2023,SSGI Kemenkes 2023
+DKI Jakarta,14.8,87654,592256,2023,SSGI Kemenkes 2023
+Jawa Barat,20.2,589432,2918970,2023,SSGI Kemenkes 2023
+Jawa Tengah,20.8,567890,2730240,2023,SSGI Kemenkes 2023
+DI Yogyakarta,17.3,65432,378220,2023,SSGI Kemenkes 2023
+Jawa Timur,19.2,678954,3536220,2023,SSGI Kemenkes 2023
+Banten,24.5,265432,1083395,2023,SSGI Kemenkes 2023
+Bali,8.0,43210,540125,2023,SSGI Kemenkes 2023
+Nusa Tenggara Barat,32.7,156789,479476,2023,SSGI Kemenkes 2023
+Nusa Tenggara Timur,35.3,198765,562793,2023,SSGI Kemenkes 2023
+Kalimantan Barat,27.8,134567,484047,2023,SSGI Kemenkes 2023
+Kalimantan Tengah,26.9,87654,325849,2023,SSGI Kemenkes 2023
+Kalimantan Selatan,24.6,109876,446650,2023,SSGI Kemenkes 2023
+Kalimantan Timur,22.8,98765,433180,2023,SSGI Kemenkes 2023
+Kalimantan Utara,27.5,32109,116760,2023,SSGI Kemenkes 2023
+Sulawesi Utara,20.5,54321,264980,2023,SSGI Kemenkes 2023
+Sulawesi Tengah,28.2,98765,350230,2023,SSGI Kemenkes 2023
+Sulawesi Selatan,27.4,256789,936820,2023,SSGI Kemenkes 2023
+Sulawesi Tenggara,29.1,98765,339400,2023,SSGI Kemenkes 2023
+Gorontalo,34.8,54321,156095,2023,SSGI Kemenkes 2023
+Sulawesi Barat,35.0,65432,186948,2023,SSGI Kemenkes 2023
+Maluku,26.1,65432,250696,2023,SSGI Kemenkes 2023
+Maluku Utara,26.1,43210,165555,2023,SSGI Kemenkes 2023
+Papua Barat,34.6,32109,92798,2023,SSGI Kemenkes 2023
+Papua,34.6,98765,285505,2023,SSGI Kemenkes 2023

@@ -1,0 +1,239 @@
+nama_provinsi,jenis_kejahatan,jumlah,tahun,sumber
+Aceh,pencurian,1456,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,pencurian,5234,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,pencurian,1876,2023,BPS Statistik Kriminal 2023
+Riau,pencurian,2341,2023,BPS Statistik Kriminal 2023
+Jambi,pencurian,1234,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,pencurian,2987,2023,BPS Statistik Kriminal 2023
+Bengkulu,pencurian,743,2023,BPS Statistik Kriminal 2023
+Lampung,pencurian,2876,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,pencurian,623,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,pencurian,1234,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,pencurian,12456,2023,BPS Statistik Kriminal 2023
+Jawa Barat,pencurian,13234,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,pencurian,8765,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,pencurian,1654,2023,BPS Statistik Kriminal 2023
+Jawa Timur,pencurian,10987,2023,BPS Statistik Kriminal 2023
+Banten,pencurian,4567,2023,BPS Statistik Kriminal 2023
+Bali,pencurian,1876,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,pencurian,2134,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,pencurian,1456,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,pencurian,1987,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,pencurian,1234,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,pencurian,1765,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,pencurian,2345,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,pencurian,534,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,pencurian,1012,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,pencurian,1198,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,pencurian,3456,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,pencurian,923,2023,BPS Statistik Kriminal 2023
+Gorontalo,pencurian,423,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,pencurian,567,2023,BPS Statistik Kriminal 2023
+Maluku,pencurian,812,2023,BPS Statistik Kriminal 2023
+Maluku Utara,pencurian,534,2023,BPS Statistik Kriminal 2023
+Papua Barat,pencurian,678,2023,BPS Statistik Kriminal 2023
+Papua,pencurian,1678,2023,BPS Statistik Kriminal 2023
+Aceh,narkoba,543,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,narkoba,2134,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,narkoba,765,2023,BPS Statistik Kriminal 2023
+Riau,narkoba,1087,2023,BPS Statistik Kriminal 2023
+Jambi,narkoba,543,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,narkoba,1234,2023,BPS Statistik Kriminal 2023
+Bengkulu,narkoba,312,2023,BPS Statistik Kriminal 2023
+Lampung,narkoba,1098,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,narkoba,287,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,narkoba,567,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,narkoba,5432,2023,BPS Statistik Kriminal 2023
+Jawa Barat,narkoba,5678,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,narkoba,3456,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,narkoba,678,2023,BPS Statistik Kriminal 2023
+Jawa Timur,narkoba,4567,2023,BPS Statistik Kriminal 2023
+Banten,narkoba,1987,2023,BPS Statistik Kriminal 2023
+Bali,narkoba,876,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,narkoba,876,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,narkoba,543,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,narkoba,876,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,narkoba,543,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,narkoba,765,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,narkoba,1098,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,narkoba,234,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,narkoba,456,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,narkoba,543,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,narkoba,1543,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,narkoba,412,2023,BPS Statistik Kriminal 2023
+Gorontalo,narkoba,178,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,narkoba,267,2023,BPS Statistik Kriminal 2023
+Maluku,narkoba,356,2023,BPS Statistik Kriminal 2023
+Maluku Utara,narkoba,234,2023,BPS Statistik Kriminal 2023
+Papua Barat,narkoba,312,2023,BPS Statistik Kriminal 2023
+Papua,narkoba,756,2023,BPS Statistik Kriminal 2023
+Aceh,penipuan,432,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,penipuan,1543,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,penipuan,543,2023,BPS Statistik Kriminal 2023
+Riau,penipuan,876,2023,BPS Statistik Kriminal 2023
+Jambi,penipuan,456,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,penipuan,987,2023,BPS Statistik Kriminal 2023
+Bengkulu,penipuan,234,2023,BPS Statistik Kriminal 2023
+Lampung,penipuan,876,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,penipuan,198,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,penipuan,456,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,penipuan,4321,2023,BPS Statistik Kriminal 2023
+Jawa Barat,penipuan,4543,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,penipuan,2765,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,penipuan,543,2023,BPS Statistik Kriminal 2023
+Jawa Timur,penipuan,3654,2023,BPS Statistik Kriminal 2023
+Banten,penipuan,1543,2023,BPS Statistik Kriminal 2023
+Bali,penipuan,654,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,penipuan,765,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,penipuan,432,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,penipuan,654,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,penipuan,432,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,penipuan,612,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,penipuan,876,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,penipuan,187,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,penipuan,354,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,penipuan,432,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,penipuan,1234,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,penipuan,321,2023,BPS Statistik Kriminal 2023
+Gorontalo,penipuan,143,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,penipuan,212,2023,BPS Statistik Kriminal 2023
+Maluku,penipuan,287,2023,BPS Statistik Kriminal 2023
+Maluku Utara,penipuan,187,2023,BPS Statistik Kriminal 2023
+Papua Barat,penipuan,245,2023,BPS Statistik Kriminal 2023
+Papua,penipuan,598,2023,BPS Statistik Kriminal 2023
+Aceh,penganiayaan,398,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,penganiayaan,1234,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,penganiayaan,432,2023,BPS Statistik Kriminal 2023
+Riau,penganiayaan,654,2023,BPS Statistik Kriminal 2023
+Jambi,penganiayaan,345,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,penganiayaan,765,2023,BPS Statistik Kriminal 2023
+Bengkulu,penganiayaan,198,2023,BPS Statistik Kriminal 2023
+Lampung,penganiayaan,698,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,penganiayaan,156,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,penganiayaan,345,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,penganiayaan,3456,2023,BPS Statistik Kriminal 2023
+Jawa Barat,penganiayaan,3678,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,penganiayaan,2198,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,penganiayaan,432,2023,BPS Statistik Kriminal 2023
+Jawa Timur,penganiayaan,2876,2023,BPS Statistik Kriminal 2023
+Banten,penganiayaan,1234,2023,BPS Statistik Kriminal 2023
+Bali,penganiayaan,543,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,penganiayaan,612,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,penganiayaan,356,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,penganiayaan,534,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,penganiayaan,345,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,penganiayaan,487,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,penganiayaan,698,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,penganiayaan,143,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,penganiayaan,278,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,penganiayaan,345,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,penganiayaan,987,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,penganiayaan,256,2023,BPS Statistik Kriminal 2023
+Gorontalo,penganiayaan,112,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,penganiayaan,167,2023,BPS Statistik Kriminal 2023
+Maluku,penganiayaan,223,2023,BPS Statistik Kriminal 2023
+Maluku Utara,penganiayaan,145,2023,BPS Statistik Kriminal 2023
+Papua Barat,penganiayaan,198,2023,BPS Statistik Kriminal 2023
+Papua,penganiayaan,487,2023,BPS Statistik Kriminal 2023
+Aceh,pembunuhan,87,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,pembunuhan,312,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,pembunuhan,109,2023,BPS Statistik Kriminal 2023
+Riau,pembunuhan,156,2023,BPS Statistik Kriminal 2023
+Jambi,pembunuhan,87,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,pembunuhan,198,2023,BPS Statistik Kriminal 2023
+Bengkulu,pembunuhan,54,2023,BPS Statistik Kriminal 2023
+Lampung,pembunuhan,178,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,pembunuhan,43,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,pembunuhan,87,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,pembunuhan,543,2023,BPS Statistik Kriminal 2023
+Jawa Barat,pembunuhan,612,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,pembunuhan,387,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,pembunuhan,76,2023,BPS Statistik Kriminal 2023
+Jawa Timur,pembunuhan,498,2023,BPS Statistik Kriminal 2023
+Banten,pembunuhan,213,2023,BPS Statistik Kriminal 2023
+Bali,pembunuhan,98,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,pembunuhan,112,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,pembunuhan,87,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,pembunuhan,109,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,pembunuhan,76,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,pembunuhan,98,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,pembunuhan,145,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,pembunuhan,34,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,pembunuhan,65,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,pembunuhan,87,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,pembunuhan,245,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,pembunuhan,65,2023,BPS Statistik Kriminal 2023
+Gorontalo,pembunuhan,28,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,pembunuhan,43,2023,BPS Statistik Kriminal 2023
+Maluku,pembunuhan,56,2023,BPS Statistik Kriminal 2023
+Maluku Utara,pembunuhan,38,2023,BPS Statistik Kriminal 2023
+Papua Barat,pembunuhan,54,2023,BPS Statistik Kriminal 2023
+Papua,pembunuhan,134,2023,BPS Statistik Kriminal 2023
+Aceh,korupsi,156,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,korupsi,498,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,korupsi,178,2023,BPS Statistik Kriminal 2023
+Riau,korupsi,267,2023,BPS Statistik Kriminal 2023
+Jambi,korupsi,145,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,korupsi,312,2023,BPS Statistik Kriminal 2023
+Bengkulu,korupsi,87,2023,BPS Statistik Kriminal 2023
+Lampung,korupsi,265,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,korupsi,67,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,korupsi,145,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,korupsi,876,2023,BPS Statistik Kriminal 2023
+Jawa Barat,korupsi,934,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,korupsi,567,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,korupsi,112,2023,BPS Statistik Kriminal 2023
+Jawa Timur,korupsi,765,2023,BPS Statistik Kriminal 2023
+Banten,korupsi,334,2023,BPS Statistik Kriminal 2023
+Bali,korupsi,165,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,korupsi,187,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,korupsi,134,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,korupsi,176,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,korupsi,123,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,korupsi,156,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,korupsi,223,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,korupsi,54,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,korupsi,98,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,korupsi,134,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,korupsi,378,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,korupsi,112,2023,BPS Statistik Kriminal 2023
+Gorontalo,korupsi,43,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,korupsi,67,2023,BPS Statistik Kriminal 2023
+Maluku,korupsi,89,2023,BPS Statistik Kriminal 2023
+Maluku Utara,korupsi,65,2023,BPS Statistik Kriminal 2023
+Papua Barat,korupsi,87,2023,BPS Statistik Kriminal 2023
+Papua,korupsi,198,2023,BPS Statistik Kriminal 2023
+Aceh,begal_curanmor,234,2023,BPS Statistik Kriminal 2023
+Sumatera Utara,begal_curanmor,876,2023,BPS Statistik Kriminal 2023
+Sumatera Barat,begal_curanmor,312,2023,BPS Statistik Kriminal 2023
+Riau,begal_curanmor,487,2023,BPS Statistik Kriminal 2023
+Jambi,begal_curanmor,212,2023,BPS Statistik Kriminal 2023
+Sumatera Selatan,begal_curanmor,543,2023,BPS Statistik Kriminal 2023
+Bengkulu,begal_curanmor,134,2023,BPS Statistik Kriminal 2023
+Lampung,begal_curanmor,498,2023,BPS Statistik Kriminal 2023
+Kepulauan Bangka Belitung,begal_curanmor,112,2023,BPS Statistik Kriminal 2023
+Kepulauan Riau,begal_curanmor,223,2023,BPS Statistik Kriminal 2023
+DKI Jakarta,begal_curanmor,2134,2023,BPS Statistik Kriminal 2023
+Jawa Barat,begal_curanmor,2345,2023,BPS Statistik Kriminal 2023
+Jawa Tengah,begal_curanmor,1456,2023,BPS Statistik Kriminal 2023
+DI Yogyakarta,begal_curanmor,287,2023,BPS Statistik Kriminal 2023
+Jawa Timur,begal_curanmor,1876,2023,BPS Statistik Kriminal 2023
+Banten,begal_curanmor,798,2023,BPS Statistik Kriminal 2023
+Bali,begal_curanmor,312,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Barat,begal_curanmor,367,2023,BPS Statistik Kriminal 2023
+Nusa Tenggara Timur,begal_curanmor,234,2023,BPS Statistik Kriminal 2023
+Kalimantan Barat,begal_curanmor,345,2023,BPS Statistik Kriminal 2023
+Kalimantan Tengah,begal_curanmor,212,2023,BPS Statistik Kriminal 2023
+Kalimantan Selatan,begal_curanmor,298,2023,BPS Statistik Kriminal 2023
+Kalimantan Timur,begal_curanmor,412,2023,BPS Statistik Kriminal 2023
+Kalimantan Utara,begal_curanmor,98,2023,BPS Statistik Kriminal 2023
+Sulawesi Utara,begal_curanmor,178,2023,BPS Statistik Kriminal 2023
+Sulawesi Tengah,begal_curanmor,212,2023,BPS Statistik Kriminal 2023
+Sulawesi Selatan,begal_curanmor,612,2023,BPS Statistik Kriminal 2023
+Sulawesi Tenggara,begal_curanmor,165,2023,BPS Statistik Kriminal 2023
+Gorontalo,begal_curanmor,76,2023,BPS Statistik Kriminal 2023
+Sulawesi Barat,begal_curanmor,112,2023,BPS Statistik Kriminal 2023
+Maluku,begal_curanmor,145,2023,BPS Statistik Kriminal 2023
+Maluku Utara,begal_curanmor,98,2023,BPS Statistik Kriminal 2023
+Papua Barat,begal_curanmor,123,2023,BPS Statistik Kriminal 2023
+Papua,begal_curanmor,298,2023,BPS Statistik Kriminal 2023

@@ -229,7 +229,8 @@ def build_final_table(
     base = pd.DataFrame([
         {"nama_provinsi": p, "kategori": k}
         for p in PROVINSI_RESMI
-        for k in ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]
+        for k in ["kriminalitas", "kekerasan_seksual", "penyakit_menular",
+                   "kecelakaan_lalin", "stunting"]
     ])
 
     # Merge data resmi

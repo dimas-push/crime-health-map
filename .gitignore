@@ -2,6 +2,10 @@
 __pycache__/
 *.pyc
 data/raw/
+!data/raw/kecelakaan_lalin.csv
+!data/raw/stunting.csv
+!data/raw/kriminalitas_detail.csv
+!data/raw/kriminalitas_rate.csv
 data/processed/
 *.db
 .venv/
