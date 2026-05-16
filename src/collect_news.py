@@ -77,28 +77,17 @@ RSS_FEEDS = {
     "republika_hukum":        "https://www.republika.co.id/rss/hukum",
     # ── Media Indonesia ────────────────────────────────────────────────────
     "mediaindonesia":         "https://mediaindonesia.com/rss",
-    # ── Tribun Network ─────────────────────────────────────────────────────
-    "tribunnews_nasional":    "https://www.tribunnews.com/rss/nasional",
-    "tribunnews_regional":    "https://www.tribunnews.com/rss/regional",
-    "tribunnews_hukum":       "https://www.tribunnews.com/rss/hukum-kriminal",
-    "tribunnews_kesehatan":   "https://www.tribunnews.com/rss/kesehatan",
-    # ── Okezone ────────────────────────────────────────────────────────────
+    # ── Okezone (aktif) ────────────────────────────────────────────────────
     "okezone_nasional":       "https://sindikasi.okezone.com/index.php/rss/1/RSS2.0",
     "okezone_kesehatan":      "https://sindikasi.okezone.com/index.php/rss/7/RSS2.0",
-    # ── Liputan6 ───────────────────────────────────────────────────────────
-    "liputan6_news":          "https://www.liputan6.com/rss/berita",
-    "liputan6_regional":      "https://www.liputan6.com/rss/regional",
-    "liputan6_kesehatan":     "https://www.liputan6.com/rss/health",
-    # ── Kompas ─────────────────────────────────────────────────────────────
-    "kompas_nasional":        "https://rss.kompas.com/nasional",
-    "kompas_tren":            "https://rss.kompas.com/tren",
-    # ── DetikNews ──────────────────────────────────────────────────────────
-    "detik_news":             "https://rss.detik.com/index.php/detikcom",
-    "detik_health":           "https://rss.detik.com/index.php/detikhealth",
-    # ── Beritasatu ─────────────────────────────────────────────────────────
-    "beritasatu_nasional":    "https://www.beritasatu.com/rss/nasional.xml",
-    # ── IDN Times ──────────────────────────────────────────────────────────
-    "idntimes_news":          "https://www.idntimes.com/rss/news",
+    # ── Suara.com ──────────────────────────────────────────────────────────
+    "suara_hukum":            "https://www.suara.com/rss/hukum-dan-kriminal",
+    "suara_health":           "https://www.suara.com/rss/health",
+    # ── Kumparan ───────────────────────────────────────────────────────────
+    "kumparan_news":          "https://kumparan.com/feed",
+    # ── JPNN ───────────────────────────────────────────────────────────────
+    "jpnn_hukum":             "https://www.jpnn.com/rss/hukum-kriminal",
+    "jpnn_health":            "https://www.jpnn.com/rss/kesehatan",
 }
 
 # ---------------------------------------------------------------------------
