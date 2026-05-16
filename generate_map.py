@@ -949,74 +949,78 @@ function buildMapWithFilter(key, days) {{
   document.getElementById('marker-count').textContent =
     filtered.length.toLocaleString('id-ID');
 
-  // Bangun script marker — pecah tag </script> agar browser tidak salah parse
-  // Teknik: '<' + '/script>' mencegah premature termination
-  const _open  = '<' + 'script>';
-  const _close = '<' + '/script>';
-  const markerScript = _open + `
-(function() {{
-  var _neon = "${{neon}}";
-  var _articles = ${{JSON.stringify(filtered)}};
-  function esc(s) {{
-    return String(s||'')
-      .replace(/&/g,'&amp;').replace(/\\u003c/g,'&lt;')
-      .replace(/\\u003e/g,'&gt;').replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }}
-  function addMarkers(lmap) {{
-    var layer = L.layerGroup().addTo(lmap);
-    _articles.forEach(function(a) {{
-      var c = L.circleMarker([a.lat, a.lon], {{
-        radius:7, color:_neon, fillColor:_neon, fillOpacity:0.85, weight:2
-      }});
-      var judul = esc(String(a.judul||'').slice(0,120));
-      var desk  = esc(String(a.deskripsi||'').slice(0,200));
-      var tgl   = esc(String(a.tanggal||'').slice(0,16));
-      var src   = esc(String(a.sumber||''));
-      var kab   = esc(String(a.kabupaten||''));
-      var url   = esc(String(a.url||'#'));
-      var meta  = tgl + (src?' | '+src:'') + (kab?' | '+kab:'');
-      var popup =
-        '<div style="background:#0a0a1f;color:'+_neon+';font-family:monospace;' +
-        'font-size:12px;border:1px solid '+_neon+';padding:10px;max-width:280px;' +
-        'box-shadow:0 0 12px '+_neon+'55;">' +
-        '<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;' +
-        'border-bottom:1px solid '+_neon+'44;padding-bottom:4px;">'+judul+'</div>' +
-        '<div style="color:'+_neon+'99;font-size:11px;margin-bottom:6px;">'+desk+'</div>' +
-        '<div style="font-size:10px;color:'+_neon+'66;margin-bottom:8px;">'+meta+'</div>' +
-        '<a href="'+url+'" target="_blank" style="color:'+_neon+';text-decoration:none;' +
-        'font-size:11px;border:1px solid '+_neon+';padding:2px 8px;">' +
-        'BACA SELENGKAPNYA &#8594;</a></div>';
-      var tipTeks = esc(String(a.judul||'').slice(0,60));
-      c.bindPopup(popup, {{maxWidth:300}});
-      c.bindTooltip(tipTeks + (String(a.judul||'').length>60?'...':''));
-      layer.addLayer(c);
-    }});
-  }}
-  function findLeafletMap() {{
-    for (var k in window) {{
-      try {{
-        var v = window[k];
-        if (v && typeof v === 'object' && typeof v.getCenter === 'function' && v._leaflet_id) {{
-          return v;
-        }}
-      }} catch(e) {{}}
-    }}
-    return null;
-  }}
-  var _tries = 0;
-  function tryAddMarkers() {{
-    var lmap = findLeafletMap();
-    if (lmap) {{ addMarkers(lmap); return; }}
-    if (++_tries < 20) {{ setTimeout(tryAddMarkers, 300); }}
-  }}
-  tryAddMarkers();
-}})();
-` + _close;
-
-  // Inject marker script ke base map HTML dan buat blob baru
   const baseHtml = MAPS[key] || '';
-  const fullHtml = baseHtml.replace('</body>', markerScript + '</body>');
+
+  // Cari nama variabel peta Folium langsung dari HTML (mis. map_a3f2b1...)
+  // Ini jauh lebih reliable daripada scan semua properti window
+  const mvMatch = baseHtml.match(/var\\s+(map_[a-zA-Z0-9_]+)\\s*=/);
+  const mapVarName = mvMatch ? mvMatch[1] : '';
+
+  // Semua data artikel diserialisasi ke JSON di sini (Python sudah escape dengan benar)
+  const articlesJson = JSON.stringify(filtered);
+
+  // Script dibangun sebagai string biasa — bukan template literal —
+  // agar tidak ada konflik antara backtick Folium dan karakter khusus
+  const sc = [
+    '(function(){{',
+    '  var _neon="' + neon + '";',
+    '  var _mvn="' + mapVarName + '";',
+    '  var _arts=' + articlesJson + ';',
+    '  function esc(s){{',
+    '    s=String(s||"");',
+    '    s=s.replace(/&/g,"&amp;");',
+    '    s=s.replace(/[<]/g,"&lt;");',
+    '    s=s.replace(/[>]/g,"&gt;");',
+    '    s=s.replace(/"/g,"&quot;");',
+    '    s=s.replace(/\'/g,"&#39;");',
+    '    return s;',
+    '  }}',
+    '  function addMarkers(lmap){{',
+    '    if(!lmap||!lmap.addLayer)return;',
+    '    var layer=L.layerGroup().addTo(lmap);',
+    '    _arts.forEach(function(a){{',
+    '      if(!a.lat||!a.lon)return;',
+    '      var mk=L.circleMarker([a.lat,a.lon],{{radius:7,color:_neon,fillColor:_neon,fillOpacity:0.85,weight:2}});',
+    '      var jd=esc(String(a.judul||"").slice(0,120));',
+    '      var ds=esc(String(a.deskripsi||"").slice(0,200));',
+    '      var tg=esc(String(a.tanggal||"").slice(0,16));',
+    '      var sr=esc(String(a.sumber||""));',
+    '      var kb=esc(String(a.kabupaten||""));',
+    '      var ur=String(a.url||"#");',
+    '      var mt=tg+(sr?" | "+sr:"")+(kb?" | "+kb:"");',
+    '      var pop=',
+    '        \'<div style="background:#0a0a1f;color:\'+_neon+\';font-family:monospace;font-size:12px;\'',
+    '        +\'border:1px solid \'+_neon+\';padding:10px;max-width:280px;box-shadow:0 0 12px \'+_neon+\'55;">\'',
+    '        +\'<div style="font-weight:bold;font-size:13px;margin-bottom:6px;color:#fff;\'',
+    '        +\'border-bottom:1px solid \'+_neon+\'44;padding-bottom:4px;">\'+jd+\'</div>\'',
+    '        +\'<div style="color:\'+_neon+\'99;font-size:11px;margin-bottom:6px;">\'+ds+\'</div>\'',
+    '        +\'<div style="font-size:10px;color:\'+_neon+\'66;margin-bottom:8px;">\'+mt+\'</div>\'',
+    '        +\'<a href="\'+ur+\'" target="_blank" style="color:\'+_neon+\';text-decoration:none;\'',
+    '        +\'font-size:11px;border:1px solid \'+_neon+\';padding:2px 8px;">BACA &#8594;</a></div>\';',
+    '      mk.bindPopup(pop,{{maxWidth:300}});',
+    '      mk.bindTooltip(esc(String(a.judul||"").slice(0,60)));',
+    '      layer.addLayer(mk);',
+    '    }});',
+    '  }}',
+    '  function getMap(){{',
+    '    if(_mvn&&window[_mvn]&&window[_mvn].addLayer)return window[_mvn];',
+    '    var keys=Object.keys(window);',
+    '    for(var i=0;i<keys.length;i++){{',
+    '      try{{var v=window[keys[i]];',
+    '        if(v&&v._leaflet_id!=null&&typeof v.addLayer==="function")return v;',
+    '      }}catch(e){{}}',
+    '    }}',
+    '    return null;',
+    '  }}',
+    '  var _t=0;',
+    '  function run(){{var m=getMap();if(m){{addMarkers(m);return;}}if(++_t<30)setTimeout(run,200);}}',
+    '  run();',
+    '}})();',
+  ].join('\\n');
+
+  // Gabungkan script ke dalam blob HTML Folium
+  const scTag = '<scr' + 'ipt>' + sc + '<' + '/scr' + 'ipt>';
+  const fullHtml = baseHtml.replace('</body>', scTag + '</body>');
 
   if (blobUrl) URL.revokeObjectURL(blobUrl);
   blobUrl = URL.createObjectURL(new Blob([fullHtml], {{type:'text/html'}}));
