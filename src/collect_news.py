@@ -124,9 +124,7 @@ def _parse_rss_items(soup: BeautifulSoup, source: str) -> list[dict]:
 
         items.append({
             "judul":   title.get_text(strip=True) if title else "",
-            "deskripsi": BeautifulSoup(
-                desc.get_text(strip=True) if desc else "", "html.parser"
-            ).get_text(strip=True)[:300],
+            "deskripsi": desc.get_text(strip=True)[:300] if desc else "",
             "url":     link.get_text(strip=True) if link else "",
             "tanggal": pub.get_text(strip=True) if pub else "",
             "sumber":  source,

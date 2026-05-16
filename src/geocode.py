@@ -595,6 +595,8 @@ _ALIASES: dict[str, str] = {
     "di yogyakarta":  "kota yogyakarta",
     "dki jakarta":    "jakarta pusat",
     "kepulauan bangka belitung": "kota pangkalpinang",
+    "bangka belitung":          "kota pangkalpinang",
+    "maluku utara":             "kota ternate",
     "sumatera barat": "kota padang",
     "bengkulu prov":  "kota bengkulu",
     "jambi prov":     "kota jambi",

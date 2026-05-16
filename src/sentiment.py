@@ -5,7 +5,7 @@ Model: indolem/indobert-base-uncased (HuggingFace)
 Fine-tuned untuk klasifikasi sentimen: positif / negatif / netral
 
 Pipeline:
-1. Load teks dari tweets.csv dan news.csv
+1. Load teks dari social.csv dan news.csv
 2. Jalankan inferensi batch IndoBERT
 3. Simpan hasil ke data/processed/sentiment.csv
 4. Update tabel SQLite dengan kolom sentimen
@@ -170,7 +170,27 @@ def run_sentiment_analysis(use_model: bool = True) -> pd.DataFrame:
             df_social["sentimen_score"] = [r["score"] for r in results]
             df_social["teks_sumber"]    = "sosial"
             df_social["tweet_id"]       = [f"social_{i}" for i in df_social.index]
-            df_social["lokasi_geo"]     = df_social.get("sumber", pd.Series(dtype=str))
+            # Ekstrak provinsi dari teks untuk lokasi_geo
+            _PROV_RESMI = [
+                "Aceh","Sumatera Utara","Sumatera Barat","Riau","Jambi",
+                "Sumatera Selatan","Bengkulu","Lampung","Kepulauan Bangka Belitung",
+                "Kepulauan Riau","DKI Jakarta","Jawa Barat","Jawa Tengah",
+                "DI Yogyakarta","Jawa Timur","Banten","Bali",
+                "Nusa Tenggara Barat","Nusa Tenggara Timur","Kalimantan Barat",
+                "Kalimantan Tengah","Kalimantan Selatan","Kalimantan Timur",
+                "Kalimantan Utara","Sulawesi Utara","Sulawesi Tengah",
+                "Sulawesi Selatan","Sulawesi Tenggara","Gorontalo","Sulawesi Barat",
+                "Maluku","Maluku Utara","Papua Barat","Papua",
+            ]
+            def _prov_from_teks(teks: str) -> str:
+                if not teks or pd.isna(teks):
+                    return ""
+                t = str(teks).lower()
+                for p in _PROV_RESMI:
+                    if p.lower() in t:
+                        return p
+                return ""
+            df_social["lokasi_geo"] = df_social["teks"].apply(_prov_from_teks)
             frames.append(df_social[["tweet_id", "teks", "kategori", "lokasi_geo",
                                       "sentimen", "sentimen_score", "teks_sumber"]])
 
