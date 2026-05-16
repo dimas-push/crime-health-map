@@ -3,349 +3,597 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEXUS // CRIME &amp; HEALTH MAP</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<title>NEXUS // CRIME &amp; HEALTH MAP — Indonesia Surveillance</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
+  /* ── Design tokens ─────────────────────────────────────────── */
   :root {
-    --bg:     #050510;
-    --panel:  #08081a;
-    --border: rgba(0,255,255,0.15);
-    --dim:    rgba(255,255,255,0.25);
-    --neon:   #00ffff;
+    --bg:        #050510;
+    --panel:     #07071a;
+    --panel2:    #0b0b20;
+    --border:    rgba(255,255,255,0.07);
+    --border-hi: rgba(255,255,255,0.15);
+    --dim:       rgba(255,255,255,0.35);
+    --dim2:      rgba(255,255,255,0.18);
+    --neon:      #00ffff;
+    --neon-glow: rgba(0,255,255,0.18);
+    --radius:    4px;
+    --mono:      'Share Tech Mono', monospace;
+    --sans:      'Inter', sans-serif;
+    --display:   'Orbitron', sans-serif;
+    --transition: 0.35s cubic-bezier(.4,0,.2,1);
   }
+
+  /* ── Reset ─────────────────────────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  button { cursor: pointer; }
+
+  /* ── CRT scanlines ─────────────────────────────────────────── */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.055) 2px, rgba(0,0,0,0.055) 4px
+    );
+  }
+
   body {
-    background: var(--bg); color: var(--neon);
-    font-family: 'Share Tech Mono', monospace;
+    background: var(--bg); color: rgba(255,255,255,0.75);
+    font-family: var(--sans);
     height: 100vh; overflow: hidden;
     display: flex; flex-direction: column;
+    font-size: 13px; line-height: 1.5;
   }
-  body::after {
-    content: ''; position: fixed; inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 2px,
-      rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
-    pointer-events: none; z-index: 9999;
-  }
+
+  /* ── Header ────────────────────────────────────────────────── */
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 20px; background: var(--panel);
+    padding: 0 20px; height: 48px; flex-shrink: 0;
+    background: var(--panel);
     border-bottom: 1px solid var(--neon);
-    box-shadow: 0 0 18px color-mix(in srgb, var(--neon) 30%, transparent);
-    flex-shrink: 0; z-index: 100; transition: border-color 0.4s, box-shadow 0.4s;
+    box-shadow: 0 1px 20px var(--neon-glow);
+    z-index: 200; transition: border-color var(--transition), box-shadow var(--transition);
   }
   .logo {
-    font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 900;
-    letter-spacing: 4px; color: var(--neon); transition: color 0.4s;
+    font-family: var(--display); font-size: 0.95rem; font-weight: 900;
+    letter-spacing: 5px; color: var(--neon); transition: color var(--transition);
+    display: flex; align-items: baseline; gap: 10px;
   }
-  .logo em { font-style: normal; color: var(--dim); font-size: 0.65rem; margin-left: 10px; letter-spacing: 2px; }
-  .hud-right { display: flex; align-items: center; gap: 20px; font-size: 0.68rem; letter-spacing: 1px; color: var(--dim); }
+  .logo-sub {
+    font-family: var(--mono); font-size: 0.55rem; letter-spacing: 2px;
+    color: var(--dim2); font-weight: 400;
+  }
+  .hud-right {
+    display: flex; align-items: center; gap: 16px;
+    font-family: var(--mono); font-size: 0.65rem; letter-spacing: 1px; color: var(--dim2);
+  }
+  .hud-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 2px;
+  }
   .pulse {
-    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-    background: var(--neon); box-shadow: 0 0 8px var(--neon);
-    margin-right: 6px; animation: blink 1.4s infinite; transition: background 0.4s, box-shadow 0.4s;
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    background: var(--neon); box-shadow: 0 0 6px var(--neon);
+    animation: blink 1.4s infinite; transition: background var(--transition), box-shadow var(--transition);
   }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
-  .main { display: flex; flex: 1; overflow: hidden; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.1} }
+
+  /* ── Layout ────────────────────────────────────────────────── */
+  .main { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+  /* ── Sidebar ───────────────────────────────────────────────── */
   aside {
-    width: 256px; flex-shrink: 0; background: var(--panel);
-    border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; overflow-y: auto; padding: 14px 10px; gap: 0;
+    width: 272px; flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border-hi);
+    display: flex; flex-direction: column;
+    transition: transform var(--transition), width var(--transition);
+    z-index: 100;
   }
-  aside::-webkit-scrollbar { width: 3px; }
-  aside::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 2px; }
+
+  /* Tab nav */
+  .tab-nav {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .tab-btn {
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: var(--dim2); font-family: var(--mono); font-size: 0.6rem;
+    letter-spacing: 2px; padding: 10px 4px; text-align: center;
+    transition: color var(--transition), border-color var(--transition);
+  }
+  .tab-btn:hover { color: var(--dim); }
+  .tab-btn.active {
+    color: var(--neon); border-bottom-color: var(--neon);
+  }
+
+  /* Tab panes */
+  .tab-pane { display: none; flex: 1; overflow-y: auto; padding: 14px 12px; }
+  .tab-pane.active { display: block; }
+  .tab-pane::-webkit-scrollbar { width: 3px; }
+  .tab-pane::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 2px; }
+
+  /* Section label */
   .sec {
-    font-size: 0.58rem; letter-spacing: 3px; color: rgba(255,255,255,0.2);
-    text-transform: uppercase; padding: 4px 4px 6px;
+    font-family: var(--mono); font-size: 0.55rem; letter-spacing: 3px;
+    color: var(--dim2); text-transform: uppercase;
+    padding: 0 2px 8px; display: flex; align-items: center; gap: 6px;
   }
+  .sec::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* Layer buttons */
   .layer-btn {
     display: flex; align-items: center; gap: 10px;
-    padding: 9px 10px; margin-bottom: 5px;
-    background: transparent; border: 1px solid rgba(255,255,255,0.06);
-    color: rgba(255,255,255,0.45); font-family: 'Share Tech Mono', monospace;
-    font-size: 0.72rem; letter-spacing: 1px; cursor: pointer; text-align: left;
-    transition: all 0.25s; position: relative;
+    padding: 10px 12px; margin-bottom: 4px; width: 100%;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim2); font-family: var(--mono);
+    font-size: 0.7rem; letter-spacing: 0.5px; text-align: left;
+    border-radius: var(--radius);
+    transition: all 0.2s; position: relative; overflow: hidden;
+  }
+  .layer-btn .icon { font-size: 1rem; flex-shrink: 0; }
+  .layer-btn .lbl { flex: 1; }
+  .layer-btn .cnt {
+    font-family: var(--display); font-size: 0.6rem;
+    color: var(--dim2); transition: color 0.2s;
   }
   .layer-btn::before {
     content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-    background: transparent; transition: background 0.25s, box-shadow 0.25s;
+    background: transparent; transition: background 0.2s, box-shadow 0.2s;
+    border-radius: var(--radius) 0 0 var(--radius);
   }
-  .layer-btn.active, .layer-btn:hover {
+  .layer-btn:hover, .layer-btn.active {
     border-color: var(--neon); color: var(--neon);
-    background: color-mix(in srgb, var(--neon) 6%, transparent);
+    background: color-mix(in srgb, var(--neon) 5%, transparent);
   }
+  .layer-btn:hover .cnt, .layer-btn.active .cnt { color: var(--neon); }
   .layer-btn.active::before, .layer-btn:hover::before {
     background: var(--neon); box-shadow: 0 0 8px var(--neon);
   }
+
+  /* Divider */
   hr.div { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
-  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+
+  /* Crime type sub-buttons */
+  .crime-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; margin-bottom: 3px; width: 100%;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim2); font-family: var(--mono); font-size: 0.65rem;
+    text-align: left; border-radius: var(--radius); transition: all 0.2s;
+  }
+  .crime-btn:hover { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
   .stat-card {
-    background: #0c0c22; border: 1px solid var(--border);
-    padding: 9px 6px; text-align: center; transition: border-color 0.4s;
+    background: var(--panel2); border: 1px solid var(--border);
+    padding: 10px 8px; text-align: center; border-radius: var(--radius);
+    transition: border-color var(--transition);
   }
-  .stat-lbl { font-size: 0.56rem; letter-spacing: 2px; color: rgba(255,255,255,0.25); text-transform: uppercase; margin-bottom: 4px; }
+  .stat-card:hover { border-color: var(--border-hi); }
+  .stat-lbl {
+    font-family: var(--mono); font-size: 0.5rem; letter-spacing: 2px;
+    color: var(--dim2); text-transform: uppercase; margin-bottom: 5px;
+  }
   .stat-val {
-    font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: 700;
-    color: var(--neon); text-shadow: 0 0 10px var(--neon); transition: color 0.4s, text-shadow 0.4s;
+    font-family: var(--display); font-size: 1.1rem; font-weight: 700;
+    color: var(--neon); text-shadow: 0 0 12px var(--neon-glow);
+    transition: color var(--transition), text-shadow var(--transition);
+    line-height: 1;
   }
+  .stat-card.wide { grid-column: span 2; }
+
+  /* Top table */
   .top-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
   .top-table th {
-    font-size: 0.57rem; letter-spacing: 2px; color: rgba(255,255,255,0.2);
-    text-transform: uppercase; padding: 3px 5px;
-    border-bottom: 1px solid var(--border); text-align: left;
+    font-family: var(--mono); font-size: 0.5rem; letter-spacing: 2px;
+    color: var(--dim2); text-transform: uppercase;
+    padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left;
   }
-  .top-table td { padding: 5px 5px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(255,255,255,0.6); }
-  .top-table .td-val { color: var(--neon); text-align: right; font-family: 'Orbitron', sans-serif; font-size: 0.65rem; }
-  .top-table tr:hover td { background: color-mix(in srgb, var(--neon) 4%, transparent); }
-  .rank { color: rgba(255,255,255,0.2); }
-  .map-wrap { flex: 1; position: relative; display: flex; flex-direction: column; }
-  #map-frame { flex: 1; border: none; display: block; }
-  .c { position: absolute; width: 18px; height: 18px; pointer-events: none; z-index: 10; transition: border-color 0.4s, box-shadow 0.4s; }
-  .c-tl { top:6px; left:6px; border-top:2px solid var(--neon); border-left:2px solid var(--neon); box-shadow:-1px -1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }
-  .c-tr { top:6px; right:6px; border-top:2px solid var(--neon); border-right:2px solid var(--neon); box-shadow:1px -1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }
-  .c-bl { bottom:6px; left:6px; border-bottom:2px solid var(--neon); border-left:2px solid var(--neon); box-shadow:-1px 1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }
-  .c-br { bottom:6px; right:6px; border-bottom:2px solid var(--neon); border-right:2px solid var(--neon); box-shadow:1px 1px 6px color-mix(in srgb, var(--neon) 50%, transparent); }
-  .warn {
-    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    font-size: 0.6rem; letter-spacing: 2px;
-    padding: 3px 12px; z-index: 10; pointer-events: none; white-space: nowrap;
+  .top-table td {
+    padding: 6px 6px; border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.55); font-size: 0.72rem;
   }
-  .warn-dummy { background: rgba(255,255,0,0.06); border: 1px solid rgba(255,255,0,0.3); color: #ffff00; }
-  .warn-live  { background: rgba(0,255,65,0.06);  border: 1px solid rgba(0,255,65,0.3);  color: #00ff41; }
-  .sent-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; font-size:0.67rem; }
-  .sent-label { width:52px; color:rgba(255,255,255,0.4); }
-  .sent-bar { flex:1; height:6px; background:#0d0d2a; border-radius:2px; overflow:hidden; }
-  .sent-fill { height:100%; border-radius:2px; transition:width 0.4s; }
-  .sent-count { width:24px; text-align:right; color:var(--neon); font-family:'Orbitron',sans-serif; font-size:0.62rem; }
-  .hud-br {
-    position: absolute; bottom: 16px; right: 16px;
-    background: rgba(8,8,26,0.85); border: 1px solid var(--border);
-    font-size: 0.6rem; letter-spacing: 2px; color: rgba(255,255,255,0.2);
-    padding: 5px 12px; z-index: 10; pointer-events: none; backdrop-filter: blur(4px);
+  .top-table .td-rank { color: var(--dim2); font-size: 0.6rem; width: 20px; }
+  .top-table .td-val {
+    color: var(--neon); text-align: right;
+    font-family: var(--display); font-size: 0.65rem; font-weight: 700;
   }
+  .top-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Sentiment bars */
+  .sent-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .sent-label { font-family: var(--mono); font-size: 0.6rem; width: 56px; color: var(--dim2); }
+  .sent-bar { flex:1; height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .sent-fill { height:100%; border-radius:3px; transition:width 0.5s ease; }
+  .sent-count {
+    width: 28px; text-align: right;
+    font-family: var(--display); font-size: 0.6rem; color: var(--dim);
+  }
+
+  /* Time filter */
+  .tf-group { display: flex; gap: 4px; flex-wrap: wrap; }
   .tf-btn {
-    padding: 4px 8px; font-family: 'Share Tech Mono', monospace;
-    font-size: 0.63rem; letter-spacing: 1px; cursor: pointer;
-    background: transparent; border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.35); transition: all 0.2s;
+    padding: 5px 10px; font-family: var(--mono); font-size: 0.62rem;
+    letter-spacing: 1px; background: transparent;
+    border: 1px solid var(--border); color: var(--dim2);
+    border-radius: var(--radius); transition: all 0.2s;
   }
-  .tf-btn.active, .tf-btn:hover {
-    background: color-mix(in srgb, var(--neon) 12%, transparent);
+  .tf-btn:hover, .tf-btn.active {
+    background: color-mix(in srgb, var(--neon) 10%, transparent);
     border-color: var(--neon); color: var(--neon);
   }
-  /* Panel detail artikel */
+
+  /* Marker count badge */
+  .marker-badge {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--panel2); margin-bottom: 12px;
+  }
+  .marker-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    background: var(--neon); box-shadow: 0 0 8px var(--neon);
+    animation: blink 1.8s infinite;
+  }
+  .marker-num {
+    font-family: var(--display); font-size: 1rem; font-weight: 700;
+    color: var(--neon); line-height: 1;
+  }
+  .marker-sub { font-size: 0.62rem; color: var(--dim2); font-family: var(--mono); }
+
+  /* ── Map area ──────────────────────────────────────────────── */
+  .map-wrap { flex: 1; position: relative; display: flex; flex-direction: column; min-width: 0; }
+  #map-frame { flex: 1; border: none; display: block; width: 100%; }
+
+  /* Corner brackets */
+  .c { position: absolute; width: 16px; height: 16px; pointer-events: none; z-index: 10;
+        transition: border-color var(--transition); }
+  .c-tl { top:8px; left:8px; border-top:2px solid var(--neon); border-left:2px solid var(--neon); }
+  .c-tr { top:8px; right:8px; border-top:2px solid var(--neon); border-right:2px solid var(--neon); }
+  .c-bl { bottom:8px; left:8px; border-bottom:2px solid var(--neon); border-left:2px solid var(--neon); }
+  .c-br { bottom:8px; right:8px; border-bottom:2px solid var(--neon); border-right:2px solid var(--neon); }
+
+  /* Data badge */
+  .warn {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 0.58rem; letter-spacing: 2px;
+    padding: 4px 14px; z-index: 10; pointer-events: none; white-space: nowrap;
+    border-radius: 2px;
+  }
+  .warn-dummy { background: rgba(255,255,0,0.06); border: 1px solid rgba(255,200,0,0.3); color: #ffcc00; }
+  .warn-live  { background: rgba(0,255,65,0.05);  border: 1px solid rgba(0,255,65,0.25); color: #00ff41; }
+
+  /* HUD bottom-right */
+  .hud-br {
+    position: absolute; bottom: 14px; right: 14px;
+    font-family: var(--mono); font-size: 0.55rem; letter-spacing: 2px;
+    color: var(--dim2); background: rgba(5,5,16,0.8); border: 1px solid var(--border);
+    padding: 4px 10px; z-index: 10; pointer-events: none; backdrop-filter: blur(6px);
+    border-radius: 2px;
+  }
+
+  /* Onboarding hint */
+  #map-hint {
+    position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
+    background: rgba(5,5,16,0.92); border: 1px solid var(--neon);
+    font-family: var(--mono); font-size: 0.65rem; letter-spacing: 1px;
+    color: var(--neon); padding: 8px 18px; z-index: 20;
+    animation: hintpulse 2.5s ease-in-out infinite; border-radius: 2px;
+    pointer-events: none; white-space: nowrap;
+  }
+  @keyframes hintpulse {
+    0%,100% { opacity: 0.85; } 50% { opacity: 0.4; }
+  }
+  #map-hint.hidden { display: none; }
+
+  /* Mobile sidebar toggle */
+  #sidebar-toggle {
+    display: none; position: fixed; bottom: 20px; left: 20px; z-index: 500;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--panel); border: 2px solid var(--neon);
+    color: var(--neon); font-size: 1.1rem;
+    box-shadow: 0 0 16px var(--neon-glow);
+    align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  #sidebar-toggle:hover { background: color-mix(in srgb, var(--neon) 12%, var(--panel)); }
+
+  /* ── Article panel ─────────────────────────────────────────── */
   #art-panel {
-    position: fixed; top: 0; right: -360px; width: 340px; height: 100vh;
+    position: fixed; top: 0; right: -380px; width: 360px; height: 100vh;
     background: var(--panel); border-left: 1px solid var(--neon);
-    box-shadow: -4px 0 24px color-mix(in srgb, var(--neon) 20%, transparent);
+    box-shadow: -6px 0 32px var(--neon-glow);
     z-index: 1000; display: flex; flex-direction: column;
-    transition: right 0.3s ease, border-color 0.4s, box-shadow 0.4s;
+    transition: right 0.3s cubic-bezier(.4,0,.2,1),
+                border-color var(--transition), box-shadow var(--transition);
     overflow: hidden;
   }
   #art-panel.open { right: 0; }
   #art-panel-header {
-    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
     display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    background: var(--panel2);
   }
   #art-panel-title {
-    font-family: 'Orbitron', sans-serif; font-size: 0.75rem; font-weight: 700;
+    font-family: var(--display); font-size: 0.78rem; font-weight: 700;
     color: var(--neon); letter-spacing: 2px;
   }
+  #art-panel-count {
+    font-family: var(--mono); font-size: 0.58rem;
+    color: var(--dim2); margin-top: 2px;
+  }
   #art-panel-close {
-    background: transparent; border: 1px solid var(--border); color: var(--dim);
-    font-size: 0.75rem; cursor: pointer; padding: 2px 8px; font-family: 'Share Tech Mono', monospace;
-    transition: all 0.2s;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim2); font-size: 0.8rem; padding: 4px 10px;
+    border-radius: var(--radius); transition: all 0.2s; font-family: var(--mono);
   }
   #art-panel-close:hover { border-color: var(--neon); color: var(--neon); }
-  #art-panel-list {
-    flex: 1; overflow-y: auto; padding: 10px;
+  .art-search-wrap {
+    padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
-  #art-panel-list::-webkit-scrollbar { width: 3px; }
-  #art-panel-list::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 2px; }
-  .art-item {
-    border: 1px solid var(--border); padding: 10px; margin-bottom: 8px;
+  #art-search {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border);
+    color: rgba(255,255,255,0.75); font-family: var(--sans); font-size: 0.75rem;
+    padding: 7px 12px; outline: none; border-radius: var(--radius);
     transition: border-color 0.2s;
   }
-  .art-item:hover { border-color: var(--neon); }
-  .art-item-title {
-    font-size: 0.72rem; color: rgba(255,255,255,0.8); margin-bottom: 5px; line-height: 1.4;
+  #art-search::placeholder { color: var(--dim2); }
+  #art-search:focus { border-color: var(--neon); }
+  #art-panel-list { flex: 1; overflow-y: auto; padding: 10px 12px; }
+  #art-panel-list::-webkit-scrollbar { width: 3px; }
+  #art-panel-list::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 2px; }
+
+  /* Empty state */
+  .art-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; gap: 12px; text-align: center; padding: 40px 20px;
   }
-  .art-item-meta {
-    font-size: 0.6rem; color: rgba(255,255,255,0.3); margin-bottom: 6px;
+  .art-empty-icon { font-size: 2.5rem; opacity: 0.3; }
+  .art-empty-title { font-size: 0.8rem; color: var(--dim2); font-family: var(--mono); letter-spacing: 2px; }
+  .art-empty-sub { font-size: 0.68rem; color: rgba(255,255,255,0.2); line-height: 1.6; }
+
+  /* Article cards */
+  .art-item {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; margin-bottom: 8px;
+    transition: border-color 0.2s, background 0.2s; cursor: default;
+  }
+  .art-item:hover { border-color: var(--border-hi); background: rgba(255,255,255,0.02); }
+  .art-badges { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
+  .art-badge {
+    font-family: var(--mono); font-size: 0.52rem; letter-spacing: 1px;
+    padding: 2px 7px; border-radius: 2px; border: 1px solid;
+  }
+  .art-item-title {
+    font-size: 0.78rem; font-weight: 500; color: rgba(255,255,255,0.82);
+    margin-bottom: 5px; line-height: 1.45;
   }
   .art-item-desc {
-    font-size: 0.65rem; color: rgba(255,255,255,0.4); line-height: 1.5;
-    margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 3;
+    font-size: 0.68rem; color: rgba(255,255,255,0.38); line-height: 1.55;
+    margin-bottom: 7px; display: -webkit-box; -webkit-line-clamp: 3;
     -webkit-box-orient: vertical; overflow: hidden;
   }
-  .art-item-link {
-    font-size: 0.62rem; color: var(--neon); text-decoration: none;
-    border: 1px solid var(--neon); padding: 2px 8px; display: inline-block;
-    transition: background 0.2s; letter-spacing: 1px;
+  .art-item-meta {
+    font-size: 0.6rem; color: var(--dim2); margin-bottom: 8px; font-family: var(--mono);
   }
-  .art-item-link:hover { background: color-mix(in srgb, var(--neon) 12%, transparent); }
-  @media (max-width: 700px) {
-    aside { width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--border); }
-    .main { flex-direction: column; }
-    .logo em { display: none; }
-    .hud-right span:nth-child(2) { display: none; }
-    #art-panel { width: 100%; right: -100%; top: auto; bottom: -100%; height: 60vh; border-left: none; border-top: 1px solid var(--neon); }
-    #art-panel.open { right: 0; bottom: 0; }
+  .art-item-link {
+    display: inline-block; font-family: var(--mono); font-size: 0.6rem;
+    letter-spacing: 1px; color: var(--neon); text-decoration: none;
+    border: 1px solid color-mix(in srgb, var(--neon) 40%, transparent);
+    padding: 3px 10px; border-radius: 2px;
+    transition: all 0.2s;
+  }
+  .art-item-link:hover {
+    background: color-mix(in srgb, var(--neon) 10%, transparent);
+    border-color: var(--neon);
+  }
+
+  /* ── Responsive ────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    aside {
+      position: fixed; top: 48px; left: 0; bottom: 0;
+      transform: translateX(-100%); z-index: 300;
+      box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+    }
+    aside.open { transform: translateX(0); }
+    #sidebar-toggle { display: flex; }
+    .logo-sub { display: none; }
+    .hud-chip:not(:first-child) { display: none; }
+    #art-panel { width: 100%; right: -100%; }
   }
 </style>
 </head>
 <body>
 
+<!-- ── Header ──────────────────────────────────────────────── -->
 <header>
-  <div class="logo">NEXUS<span style="color:var(--neon)">//</span>MAP
-    <em>INDONESIA CRIME &amp; HEALTH SURVEILLANCE</em>
+  <div class="logo">
+    NEXUS<span style="color:var(--neon);margin:0 2px">//</span>MAP
+    <span class="logo-sub">INDONESIA CRIME &amp; HEALTH SURVEILLANCE</span>
   </div>
   <div class="hud-right">
-    <span id="sys-status"><span class="pulse" id="sys-pulse"></span><span id="sys-label">MEMUAT...</span></span>
-    <span>34 PROV &nbsp;|&nbsp; <span id="hud-markers">989</span> TITIK</span>
-    <span id="hud-age" title="Waktu scraping terakhir">—</span>
-    <span id="clk">--:--:--</span>
+    <div class="hud-chip" id="sys-status">
+      <span class="pulse" id="sys-pulse"></span>
+      <span id="sys-label">MEMUAT...</span>
+    </div>
+    <div class="hud-chip">
+      <span style="color:var(--neon);font-family:'Orbitron',sans-serif;font-size:0.7rem" id="hud-markers">989</span>
+      <span>TITIK</span>
+    </div>
+    <div class="hud-chip" id="hud-age" title="Waktu scraping terakhir">—</div>
+    <div class="hud-chip" id="clk" style="font-family:'Orbitron',sans-serif;color:var(--neon)">--:--:--</div>
   </div>
 </header>
 
+<!-- ── Layout ───────────────────────────────────────────────── -->
 <div class="main">
-  <aside>
-    <div class="sec">// DATA LAYER</div>
-    <button class="layer-btn active" data-key="kriminalitas" data-neon="#ff6b35" onclick="switchLayer('kriminalitas',this)"><span class="icon">&#9888;</span><span>KRIMINALITAS UMUM</span></button>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+
+    <!-- Tab navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('layer',this)">LAYER</button>
+      <button class="tab-btn"        onclick="switchTab('stats',this)">STATISTIK</button>
+      <button class="tab-btn"        onclick="switchTab('filter',this)">FILTER</button>
+    </div>
+
+    <!-- ── Tab: LAYER ─────────────────────────────────────── -->
+    <div class="tab-pane active" id="tab-layer">
+      <div class="sec">Data layer</div>
+      <button class="layer-btn active" data-key="kriminalitas" data-neon="#ff6b35" onclick="switchLayer('kriminalitas',this)"><span class="icon">&#9888;</span><span>KRIMINALITAS UMUM</span></button>
 <button class="layer-btn " data-key="kekerasan_seksual" data-neon="#ff00ff" onclick="switchLayer('kekerasan_seksual',this)"><span class="icon">&#128737;</span><span>KEKERASAN SEKSUAL</span></button>
 <button class="layer-btn " data-key="penyakit_menular" data-neon="#00ff41" onclick="switchLayer('penyakit_menular',this)"><span class="icon">&#9877;</span><span>PENYAKIT MENULAR</span></button>
 <button class="layer-btn " data-key="kecelakaan_lalin" data-neon="#ffcc00" onclick="switchLayer('kecelakaan_lalin',this)"><span class="icon">&#128664;</span><span>KECELAKAAN LALIN</span></button>
 <button class="layer-btn " data-key="stunting" data-neon="#00ccff" onclick="switchLayer('stunting',this)"><span class="icon">&#129657;</span><span>STUNTING/GIZI BURUK</span></button>
 
-    <hr class="div"/>
-    <div class="sec">// DATA ESTIMASI BPS 2023
-      <span style="color:#ffaa00;font-size:0.5rem;margin-left:4px;">&#9888; STATIS</span>
-    </div>
-    <div style="font-size:0.58rem;color:rgba(255,180,0,0.5);padding:0 4px 6px;line-height:1.5;">
-      Angka ini adalah <b style="color:#ffaa00">estimasi</b> berdasarkan<br/>
-      proporsi populasi, bukan data BPS asli.
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-lbl">TOTAL</div><div class="stat-val" id="s-total">—</div></div>
-      <div class="stat-card"><div class="stat-lbl">RATA-RATA</div><div class="stat-val" id="s-avg">—</div></div>
-      <div class="stat-card"><div class="stat-lbl">TERTINGGI</div><div class="stat-val" id="s-max">—</div></div>
-      <div class="stat-card"><div class="stat-lbl">TERENDAH</div><div class="stat-val" id="s-min">—</div></div>
-    </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">Top 5 (estimasi BPS):</div>
-    <table class="top-table">
-      <thead><tr><th>#</th><th>WILAYAH</th><th>EST.</th></tr></thead>
-      <tbody id="top-body"></tbody>
-    </table>
-
-    <hr class="div"/>
-    <div class="sec">// DATA NYATA — BERITA SCRAPED
-      <span style="color:#00ff41;font-size:0.5rem;margin-left:4px;">&#9679; LIVE</span>
-    </div>
-    <div style="font-size:0.58rem;color:rgba(0,255,65,0.5);padding:0 4px 6px;line-height:1.5;">
-      Dihitung dari artikel berita ter-geocode<br/>
-      (CNN, Tempo, Jawa Pos, Antara, dll.)
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card" style="grid-column:span 2">
-        <div class="stat-lbl">TOTAL ARTIKEL TERDETEKSI</div>
-        <div class="stat-val" id="n-total" style="font-size:1.1rem">—</div>
-      </div>
-    </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">Top 5 provinsi (dari berita):</div>
-    <table class="top-table">
-      <thead><tr><th>#</th><th>WILAYAH</th><th>BERITA</th></tr></thead>
-      <tbody id="news-top-body"></tbody>
-    </table>
-
-    <hr class="div"/>
-    <div class="sec">// JENIS KEJAHATAN</div>
-    <div id="crime-type-panel" style="display:none">
-      <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:2px 4px 6px;">
-        Sub-kategori kriminalitas per jenis
-      </div>
-      <button class="crime-btn" data-jenis="" onclick="switchCrimeType('',this)"
-        style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:4px;
-          background:color-mix(in srgb,#ff6b35 8%,transparent);
-          border:1px solid #ff6b35;color:#ff6b35;
-          font-family:'Share Tech Mono',monospace;font-size:0.68rem;
-          cursor:pointer;width:100%;text-align:left;">
-        &#9646; SEMUA JENIS
-      </button>
-      <button class="crime-btn" data-jenis="pencurian" onclick="switchCrimeType('pencurian',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ff9900">&#9656; PENCURIAN</button>
+      <div id="crime-type-panel" style="display:none">
+        <hr class="div"/>
+        <div class="sec">Sub-kategori</div>
+        <button class="crime-btn" data-jenis="" onclick="switchCrimeType('',this)"
+          style="color:#ff6b35;border-color:rgba(255,107,53,0.4);margin-bottom:4px;">
+          &#9646;&nbsp; SEMUA JENIS
+        </button>
+        <button class="crime-btn" data-jenis="pencurian" onclick="switchCrimeType('pencurian',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ff9900">&#9656; PENCURIAN</button>
 <button class="crime-btn" data-jenis="narkoba" onclick="switchCrimeType('narkoba',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ff6b35">&#9656; NARKOBA</button>
 <button class="crime-btn" data-jenis="penipuan" onclick="switchCrimeType('penipuan',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ffcc00">&#9656; PENIPUAN</button>
 <button class="crime-btn" data-jenis="penganiayaan" onclick="switchCrimeType('penganiayaan',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ff4444">&#9656; PENGANIAYAAN</button>
 <button class="crime-btn" data-jenis="pembunuhan" onclick="switchCrimeType('pembunuhan',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#cc0000">&#9656; PEMBUNUHAN</button>
 <button class="crime-btn" data-jenis="korupsi" onclick="switchCrimeType('korupsi',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ff8800">&#9656; KORUPSI</button>
 <button class="crime-btn" data-jenis="begal_curanmor" onclick="switchCrimeType('begal_curanmor',this)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);font-family:Share Tech Mono,monospace;font-size:0.68rem;cursor:pointer;width:100%;text-align:left;transition:all 0.2s;" data-neon="#ff5500">&#9656; BEGAL/CURANMOR</button>
+      </div>
+
+      <hr class="div"/>
+      <div class="sec">Sumber data</div>
+      <div style="font-size:0.65rem;color:var(--dim2);line-height:1.8;">
+        BPS · Kemenkes · SIMFONI-PPA<br/>
+        Google News · CNN · Tempo · Antara<br/>
+        Republika · Jawa Pos · Okezone
+      </div>
     </div>
 
-    <hr class="div"/>
-    <div class="sec">// TITIK KEJADIAN</div>
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 4px;">
-      <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--neon)" opacity="0.85"/></svg>
-      <span style="font-size:0.7rem;color:rgba(255,255,255,0.5)">
-        <span id="marker-count" style="color:var(--neon);font-family:'Orbitron',sans-serif;font-size:0.75rem">0</span>
-        &nbsp;kejadian terdeteksi
-      </span>
-    </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 4px;">Filter rentang waktu:</div>
-    <div style="display:flex;gap:4px;flex-wrap:wrap;padding:0 2px 6px;">
-      <button class="tf-btn"        data-days="7"  onclick="setTimeFilter(7,this)">7H</button>
-      <button class="tf-btn"        data-days="30" onclick="setTimeFilter(30,this)">30H</button>
-      <button class="tf-btn"        data-days="90" onclick="setTimeFilter(90,this)">90H</button>
-      <button class="tf-btn active" data-days="0"  onclick="setTimeFilter(0,this)">SEMUA</button>
-    </div>
-    <div style="font-size:0.6rem;color:rgba(255,255,255,0.2);padding:0 4px 6px;">
-      Klik titik di peta untuk detail berita
+    <!-- ── Tab: STATISTIK ─────────────────────────────────── -->
+    <div class="tab-pane" id="tab-stats">
+
+      <div class="sec">Estimasi BPS 2023
+        <span style="font-size:0.5rem;color:#ffaa00;font-family:'Share Tech Mono',monospace;">&#9888; STATIS</span>
+      </div>
+      <div style="font-size:0.65rem;color:rgba(255,180,0,0.5);line-height:1.6;margin-bottom:12px;">
+        Angka estimasi proporsi populasi, bukan data BPS asli.
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-lbl">Total</div><div class="stat-val" id="s-total">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Rata-rata</div><div class="stat-val" id="s-avg">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Tertinggi</div><div class="stat-val" id="s-max">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Terendah</div><div class="stat-val" id="s-min">—</div></div>
+      </div>
+      <div class="sec" style="margin-top:4px;">Top 5 provinsi</div>
+      <table class="top-table">
+        <thead><tr><th>#</th><th>Wilayah</th><th>Kasus</th></tr></thead>
+        <tbody id="top-body"></tbody>
+      </table>
+
+      <hr class="div"/>
+      <div class="sec">Berita ter-geocode
+        <span style="font-size:0.5rem;color:#00ff41;font-family:'Share Tech Mono',monospace;">&#9679; LIVE</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card wide">
+          <div class="stat-lbl">Total artikel terdeteksi</div>
+          <div class="stat-val" id="n-total">—</div>
+        </div>
+      </div>
+      <div class="sec" style="margin-top:4px;">Top 5 (dari berita)</div>
+      <table class="top-table">
+        <thead><tr><th>#</th><th>Wilayah</th><th>Berita</th></tr></thead>
+        <tbody id="news-top-body"></tbody>
+      </table>
+
+      <hr class="div"/>
+      <div class="sec">Analisis sentimen</div>
+      <div id="sent-panel" style="margin-top:4px;">
+        <div class="sent-row">
+          <span class="sent-label">Negatif</span>
+          <div class="sent-bar"><div class="sent-fill" id="sent-neg" style="background:#ff4444;width:0%"></div></div>
+          <span class="sent-count" id="sent-neg-n">0</span>
+        </div>
+        <div class="sent-row">
+          <span class="sent-label">Netral</span>
+          <div class="sent-bar"><div class="sent-fill" id="sent-net" style="background:#666;width:0%"></div></div>
+          <span class="sent-count" id="sent-net-n">0</span>
+        </div>
+        <div class="sent-row">
+          <span class="sent-label">Positif</span>
+          <div class="sent-bar"><div class="sent-fill" id="sent-pos" style="background:#00ff41;width:0%"></div></div>
+          <span class="sent-count" id="sent-pos-n">0</span>
+        </div>
+      </div>
     </div>
 
-    <hr class="div"/>
-    <div class="sec">// ANALISIS SENTIMEN</div>
-    <div id="sent-panel">
-      <div class="sent-row"><span class="sent-label">NEGATIF</span><div class="sent-bar"><div class="sent-fill" id="sent-neg" style="background:#ff4444;width:0%"></div></div><span class="sent-count" id="sent-neg-n">0</span></div>
-      <div class="sent-row"><span class="sent-label">NETRAL</span><div class="sent-bar"><div class="sent-fill" id="sent-net" style="background:#888888;width:0%"></div></div><span class="sent-count" id="sent-net-n">0</span></div>
-      <div class="sent-row"><span class="sent-label">POSITIF</span><div class="sent-bar"><div class="sent-fill" id="sent-pos" style="background:#00ff41;width:0%"></div></div><span class="sent-count" id="sent-pos-n">0</span></div>
+    <!-- ── Tab: FILTER ────────────────────────────────────── -->
+    <div class="tab-pane" id="tab-filter">
+
+      <div class="sec">Titik kejadian</div>
+      <div class="marker-badge">
+        <div class="marker-dot"></div>
+        <div>
+          <div class="marker-num" id="marker-count">0</div>
+          <div class="marker-sub">kejadian terdeteksi</div>
+        </div>
+      </div>
+
+      <div class="sec">Rentang waktu</div>
+      <div class="tf-group" style="margin-bottom:16px;">
+        <button class="tf-btn"        onclick="setTimeFilter(7,this)">7 Hari</button>
+        <button class="tf-btn"        onclick="setTimeFilter(30,this)">30 Hari</button>
+        <button class="tf-btn"        onclick="setTimeFilter(90,this)">90 Hari</button>
+        <button class="tf-btn active" onclick="setTimeFilter(0,this)">Semua</button>
+      </div>
+
+      <div style="font-size:0.65rem;color:var(--dim2);line-height:1.7;padding:8px 10px;
+          border:1px solid var(--border);border-radius:var(--radius);">
+        &#9432;&nbsp; Klik titik di peta untuk melihat detail berita.<br/>
+        Klik area provinsi untuk melihat semua berita dari wilayah tersebut.
+      </div>
     </div>
 
-    <hr class="div"/>
-    <div class="sec" style="color:rgba(255,255,255,0.1)">// SUMBER: BPS · KEMENKES · SIMFONI-PPA</div>
-    <div style="font-size:0.58rem;color:rgba(255,255,255,0.15);line-height:1.7;padding:2px 4px">
-      Berita: Google News · CNN · Tempo<br/>
-      Antara · Republika · Jawa Pos<br/>
-      Sosmed: Telegram · YouTube
-    </div>
   </aside>
 
+  <!-- Map area -->
   <div class="map-wrap">
     <div class="c c-tl"></div><div class="c c-tr"></div>
     <div class="c c-bl"></div><div class="c c-br"></div>
-    <div class="warn warn-live">&#9888; DATA RESMI 2023</div>
-    <iframe id="map-frame" src="maps/kriminalitas.html"></iframe>
+    <div class="warn warn-live">&#9888;&nbsp;DATA RESMI 2023</div>
+    <iframe id="map-frame" src="maps/kriminalitas.html" title="Peta interaktif"></iframe>
+    <div id="map-hint">&#9650;&nbsp; Klik provinsi untuk melihat berita terkait</div>
     <div class="hud-br">WGS84 · EPSG:4326 · &copy; NEXUS MAP SYS</div>
   </div>
 </div>
 
-<!-- Panel detail artikel per provinsi -->
+<!-- Mobile sidebar toggle -->
+<button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">&#9776;</button>
+
+<!-- ── Panel detail artikel ─────────────────────────────────── -->
 <div id="art-panel">
   <div id="art-panel-header">
     <div>
-      <span id="art-panel-title">ARTIKEL</span>
-      <span id="art-panel-count" style="margin-left:8px;font-size:0.6rem;color:rgba(255,255,255,0.3);font-family:'Share Tech Mono',monospace;"></span>
+      <div id="art-panel-title">ARTIKEL</div>
+      <div id="art-panel-count"></div>
     </div>
-    <button id="art-panel-close" onclick="closeArtPanel()">&#10005;</button>
+    <button id="art-panel-close" onclick="closeArtPanel()">&#10005; Tutup</button>
   </div>
-  <div style="padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;">
-    <input id="art-search" type="text" placeholder="Cari judul / sumber..."
-      oninput="filterArtPanel(this.value)"
-      style="width:100%;background:#0a0a22;border:1px solid var(--border);
-        color:var(--neon);font-family:'Share Tech Mono',monospace;font-size:0.68rem;
-        padding:5px 10px;outline:none;transition:border-color 0.2s;"
-      onfocus="this.style.borderColor='var(--neon)'"
-      onblur="this.style.borderColor='var(--border)'"/>
+  <div class="art-search-wrap">
+    <input id="art-search" type="text" placeholder="&#128269; Cari judul atau sumber..."
+      oninput="filterArtPanel(this.value)"/>
   </div>
   <div id="art-panel-list">
-    <div style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:30px 0;text-align:center;">
-      Klik provinsi di peta untuk melihat berita terkait
+    <div class="art-empty">
+      <div class="art-empty-icon">&#128506;</div>
+      <div class="art-empty-title">PILIH PROVINSI</div>
+      <div class="art-empty-sub">Klik area provinsi di peta untuk menampilkan berita terkait dari wilayah tersebut</div>
     </div>
   </div>
 </div>
@@ -360,6 +608,19 @@ const ARTICLES   = [{"judul":"Kejahatan Bos mafia asal Skotlandia dibekuk di Bal
 
 let currentKey  = 'kriminalitas';
 let currentDays = 0;
+
+// ── Tab navigation ──────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+}
+
+// ── Mobile sidebar toggle ───────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
 
 // Terima pesan dari iframe
 window.addEventListener('message', function(e) {
@@ -424,11 +685,14 @@ function openArtPanel(provinsi, arts) {
   const title   = document.getElementById('art-panel-title');
   const counter = document.getElementById('art-panel-count');
   title.textContent = provinsi ? provinsi.toUpperCase() : 'ARTIKEL';
-  if (counter) counter.textContent = _artPanelArts.length + ' artikel';
+  if (counter) counter.textContent = _artPanelArts.length + ' artikel ditemukan';
   const searchEl = document.getElementById('art-search');
   if (searchEl) searchEl.value = '';
   _renderArtItems(_artPanelArts);
   panel.classList.add('open');
+  // Sembunyikan onboarding hint setelah pertama kali dipakai
+  const hint = document.getElementById('map-hint');
+  if (hint) hint.classList.add('hidden');
 }
 
 function filterArtPanel(q) {
@@ -596,6 +860,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const firstBtn = document.querySelector('.layer-btn');
   if (firstBtn) switchLayer(firstBtn.dataset.key, firstBtn);
   updateSystemStatus();
+  // Auto-hide onboarding hint setelah 8 detik
+  setTimeout(() => {
+    const hint = document.getElementById('map-hint');
+    if (hint && !hint.classList.contains('hidden')) hint.classList.add('hidden');
+  }, 8000);
 });
 </script>
 </body>
