@@ -959,8 +959,8 @@ function buildMapWithFilter(key, days) {{
   var _articles = ${{JSON.stringify(filtered)}};
   function esc(s) {{
     return String(s||'')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+      .replace(/&/g,'&amp;').replace(/\\u003c/g,'&lt;')
+      .replace(/\\u003e/g,'&gt;').replace(/"/g,'&quot;')
       .replace(/'/g,'&#39;');
   }}
   function addMarkers(lmap) {{
