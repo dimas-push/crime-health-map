@@ -216,7 +216,7 @@ def _detect_kategori(teks: str) -> Optional[str]:
     """Deteksi kategori artikel berdasarkan kata kunci (case-insensitive)."""
     teks_lower = teks.lower()
     # Kekerasan seksual diperiksa lebih dulu karena kata kuncinya spesifik
-    for kategori in ["kekerasan_seksual", "kriminalitas", "penyakit_menular", "bencana_alam"]:
+    for kategori in ["kekerasan_seksual", "narkoba", "kriminalitas", "penyakit_menular", "bencana_alam"]:
         for kw in KEYWORDS[kategori]:
             if kw.lower() in teks_lower:
                 return kategori

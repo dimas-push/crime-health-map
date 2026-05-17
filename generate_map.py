@@ -133,6 +133,13 @@ LAYERS = {
         "colors": ["#1a0500", "#3d0f00", "#801f00", "#cc4400", "#ff4500"],
         "col":    "bencana_alam",
     },
+    "narkoba": {
+        "label":  "NARKOBA/NAPZA",
+        "icon":   "&#128138;",
+        "neon":   "#cc00ff",
+        "colors": ["#0d0020", "#280050", "#5500aa", "#9900dd", "#cc00ff"],
+        "col":    "narkoba",
+    },
 }
 
 CRIME_TYPES = {
@@ -213,11 +220,22 @@ def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
     )
 
 _bencana_series = _load_extra_csv("bencana_alam.csv", "jumlah_kejadian")
+_narkoba_series = _load_extra_csv("narkoba.csv",     "jumlah_kasus")
+
+# Dataset sosio-ekonomi untuk korelasi & risk score
+_kemiskinan_series  = _load_extra_csv("kemiskinan.csv",  "pct_miskin")
+_pengangguran_series= _load_extra_csv("pengangguran.csv","tpt_pct")
+_ipm_series         = _load_extra_csv("ipm.csv",         "ipm")
+
+_EXTRA_SERIES = {
+    "bencana_alam": _bencana_series,
+    "narkoba":      _narkoba_series,
+}
 
 data = pd.DataFrame({"id_wilayah": gdf[id_col]})
 for kat in LAYERS:
-    if kat == "bencana_alam":
-        data[kat] = data["id_wilayah"].map(_bencana_series).fillna(0).astype(int)
+    if kat in _EXTRA_SERIES:
+        data[kat] = data["id_wilayah"].map(_EXTRA_SERIES[kat]).fillna(0).astype(int)
     else:
         data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
 
@@ -242,10 +260,17 @@ _per100k_data = {
     "kekerasan_seksual":_per100k(_to_prov_series(_data_idx["kekerasan_seksual"])),
     "penyakit_menular": _per100k(_to_prov_series(_data_idx["penyakit_menular"])),
     "bencana_alam":     _per100k(_to_prov_series(_data_idx["bencana_alam"])),
+    "narkoba":          _per100k(_to_prov_series(_data_idx["narkoba"])),
 }
 
 # Risk score: composite index 0-100 dari semua kategori (min-max normalisasi)
 def _risk_score() -> pd.Series:
+    """
+    Composite risk index 0-100.
+    Pendekatan BNPB IRBI: Risk = Ancaman / Kapasitas.
+    - Ancaman: rata-rata min-max per-kapita semua layer
+    - Kapasitas: IPM (dinormalisasi 0-1, makin tinggi IPM makin besar kapasitas)
+    """
     from process import PROVINSI_RESMI
     scores = pd.Series(0.0, index=PROVINSI_RESMI)
     count  = pd.Series(0,   index=PROVINSI_RESMI)
@@ -256,7 +281,18 @@ def _risk_score() -> pd.Series:
         norm = (s / mx).reindex(PROVINSI_RESMI).fillna(0)
         scores += norm
         count  += (norm > 0).astype(int)
-    combined = scores / count.replace(0, 1)
+    ancaman = scores / count.replace(0, 1)
+
+    # Kapasitas dari IPM: normalisasi ke 0.5–1.0 agar tidak zeroing ancaman
+    ipm_reindexed = _ipm_series.reindex(PROVINSI_RESMI)
+    ipm_min, ipm_max = ipm_reindexed.min(), ipm_reindexed.max()
+    if ipm_max > ipm_min:
+        kapasitas = 0.5 + 0.5 * (ipm_reindexed - ipm_min) / (ipm_max - ipm_min)
+    else:
+        kapasitas = pd.Series(0.75, index=PROVINSI_RESMI)
+    kapasitas = kapasitas.fillna(0.75)
+
+    combined = ancaman / kapasitas
     mx = combined.max()
     if mx > 0:
         combined = (combined / mx * 100).round(1)
@@ -549,7 +585,7 @@ _TOOLTIP_ALIAS = {
 }
 
 
-_LOG_SCALE_LAYERS = {"penyakit_menular", "bencana_alam"}
+_LOG_SCALE_LAYERS = {"penyakit_menular", "bencana_alam", "narkoba"}
 
 
 def make_map(key: str) -> None:
@@ -687,6 +723,28 @@ def _build_weekly_trend() -> str:
     return json.dumps(trend, ensure_ascii=False)
 
 trend_json = _build_weekly_trend()
+
+
+def _build_korelasi_json() -> str:
+    """
+    Data scatter chart: kemiskinan (x) vs kriminalitas per-100k (y) per provinsi.
+    Tambahkan IPM sebagai ukuran titik (bubble) dan pengangguran sebagai warna.
+    """
+    from process import PROVINSI_RESMI
+    krim_p100k  = _per100k_data.get("kriminalitas", pd.Series(dtype=float))
+    rows = []
+    for prov in PROVINSI_RESMI:
+        rows.append({
+            "p":    prov,
+            "x":    round(float(_kemiskinan_series.get(prov, 0)),   2),  # kemiskinan %
+            "y":    round(float(krim_p100k.get(prov, 0)),           1),  # kriminalitas/100k
+            "ipm":  round(float(_ipm_series.get(prov, 0)),          2),  # IPM
+            "tpt":  round(float(_pengangguran_series.get(prov, 0)), 2),  # pengangguran %
+            "nar":  round(float(_narkoba_series.get(prov, 0)),      0),  # kasus narkoba
+        })
+    return json.dumps(rows, ensure_ascii=False)
+
+korelasi_json = _build_korelasi_json()
 
 data_badge     = "DATA DUMMY" if IS_DUMMY else "DATA RESMI 2023"
 data_badge_cls = "warn-dummy" if IS_DUMMY else "warn-live"
@@ -1251,6 +1309,7 @@ HTML = f"""<!DOCTYPE html>
     <div class="tab-nav">
       <button class="tab-btn active" onclick="switchTab('layer',this)">LAYER</button>
       <button class="tab-btn"        onclick="switchTab('stats',this)">STATISTIK</button>
+      <button class="tab-btn"        onclick="switchTab('korelasi',this)">KORELASI</button>
       <button class="tab-btn"        onclick="switchTab('filter',this)">FILTER</button>
     </div>
 
@@ -1387,6 +1446,44 @@ HTML = f"""<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- ── Tab: KORELASI ─────────────────────────────────── -->
+    <div class="tab-pane" id="tab-korelasi">
+      <div class="sec">Analisis Korelasi Sosio-Ekonomi</div>
+      <div style="font-size:0.62rem;color:rgba(255,255,255,0.35);margin-bottom:6px">
+        Sumber: BPS 2023 (kemiskinan, pengangguran, IPM) · BNN 2023 (narkoba)
+      </div>
+
+      <!-- Scatter: Kemiskinan vs Kriminalitas -->
+      <div style="margin-bottom:4px;font-size:0.65rem;color:var(--neon)">
+        &#9675; Kemiskinan (%) vs Kriminalitas per 100rb Jiwa
+      </div>
+      <canvas id="scatter-kemiskinan" width="260" height="180"
+        style="width:100%;border:1px solid rgba(255,255,255,0.07);border-radius:2px;background:#050510;cursor:crosshair">
+      </canvas>
+      <div id="scatter-tooltip" style="font-size:0.6rem;color:var(--neon);min-height:14px;margin:2px 0 8px"></div>
+
+      <!-- Scatter: IPM vs Risk Score -->
+      <div style="margin-bottom:4px;font-size:0.65rem;color:var(--neon)">
+        &#9651; IPM vs Risk Score Komposit
+      </div>
+      <canvas id="scatter-ipm" width="260" height="180"
+        style="width:100%;border:1px solid rgba(255,255,255,0.07);border-radius:2px;background:#050510;cursor:crosshair">
+      </canvas>
+      <div id="scatter-ipm-tooltip" style="font-size:0.6rem;color:var(--neon);min-height:14px;margin:2px 0 8px"></div>
+
+      <!-- Ranking kemiskinan -->
+      <div class="sec" style="margin-top:4px">Top 5 Kemiskinan Tertinggi</div>
+      <table class="stat-table" id="kemiskinan-rank"></table>
+
+      <!-- Ranking pengangguran -->
+      <div class="sec" style="margin-top:4px">Top 5 Pengangguran (TPT)</div>
+      <table class="stat-table" id="pengangguran-rank"></table>
+
+      <div style="font-size:0.58rem;color:rgba(255,255,255,0.25);margin-top:6px;line-height:1.4">
+        Korelasi bersifat deskriptif, bukan kausal. Hover titik untuk detail provinsi.
+      </div>
+    </div>
+
     <!-- ── Tab: FILTER ────────────────────────────────────── -->
     <div class="tab-pane" id="tab-filter">
 
@@ -1444,7 +1541,9 @@ HTML = f"""<!DOCTYPE html>
         <li><strong>Kekerasan Seksual</strong> — SIMFONI-PPA Kementerian PPPA 2023 (kasus terdokumentasi yang dilaporkan)</li>
         <li><strong>Penyakit Menular</strong> — Kemenkes RI 2023 (gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis)</li>
         <li><strong>Bencana Alam</strong> — BNPB Data Informasi Bencana Indonesia 2023 (jumlah kejadian bencana per provinsi)</li>
+        <li><strong>Narkoba/NAPZA</strong> — BNN Survei Nasional Penyalahgunaan Narkoba 2023 (jumlah kasus per provinsi)</li>
       </ul>
+      <div class="warn-box">&#9888; Data sosio-ekonomi pendukung (kemiskinan, pengangguran, IPM) dari BPS 2023 digunakan untuk panel korelasi dan risk score — bukan sebagai layer utama peta.</div>
       <div class="warn-box">&#9888; Data resmi bersifat <strong>statis tahun 2023</strong>. Data ini tidak diperbarui otomatis. Angka aktual mungkin berbeda dari data publikasi resmi terbaru.</div>
 
       <h3>Normalisasi Per Kapita</h3>
@@ -1452,7 +1551,8 @@ HTML = f"""<!DOCTYPE html>
       <p>Normalisasi ini penting karena provinsi berpenduduk besar (Jawa Timur, Jawa Barat) hampir selalu unggul secara absolut, meski tidak selalu paling berisiko per kapita.</p>
 
       <h3>Risk Score Komposit</h3>
-      <p>Indeks eksperimental 0–100 yang menggabungkan 4 kategori dengan langkah:</p>
+      <p>Indeks eksperimental 0–100 mengadaptasi pendekatan BNPB IRBI: <strong>Risk = Ancaman / Kapasitas</strong>. Ancaman dari 5 kategori (kriminalitas, kekerasan seksual, penyakit menular, bencana alam, narkoba) dinormalisasi per-kapita. Kapasitas dari IPM (makin tinggi IPM, makin besar kapasitas suatu provinsi mengatasi risiko).</p>
+      <p>Langkah perhitungan:</p>
       <ul>
         <li>Hitung nilai per-kapita tiap kategori per provinsi</li>
         <li>Normalisasi min-max (0–1) dalam tiap kategori</li>
@@ -1514,6 +1614,7 @@ const SENTIMEN   = {sentimen_json};
 const ARTICLES   = {articles_json};
 const RISK_TOP10 = {risk_json};
 const TREND      = {trend_json};
+const KORELASI   = {korelasi_json};
 
 let currentKey  = 'kriminalitas';
 let currentDays = 0;
@@ -1524,6 +1625,10 @@ function switchTab(id, btn) {{
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tab-' + id).classList.add('active');
+  if (id === 'korelasi') {{
+    const neon = getComputedStyle(document.documentElement).getPropertyValue('--neon').trim() || '#ff6b35';
+    drawKorelasi(neon);
+  }}
 }}
 
 // ── Mobile sidebar toggle ───────────────────────────────────────
@@ -1716,8 +1821,116 @@ const _STAT_NOTE = {{
   kekerasan_seksual:'SIMFONI-PPA Kemenkes PPPA 2023 — kasus terdokumentasi.',
   penyakit_menular: 'Kemenkes RI 2023 — gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis.',
   bencana_alam:     'BNPB DIBI 2023 — jumlah kejadian bencana (banjir, longsor, gempa, dll).',
+  narkoba:          'BNN Survei Nasional 2023 — jumlah kasus penyalahgunaan narkoba/NAPZA.',
 }};
-const _HAS_BERITA = ['kriminalitas','kekerasan_seksual','penyakit_menular','bencana_alam'];
+const _HAS_BERITA = ['kriminalitas','kekerasan_seksual','penyakit_menular','bencana_alam','narkoba'];
+
+// ── Scatter charts & korelasi panel ─────────────────────────────
+function _drawScatter(canvasId, tooltipId, data, xKey, yKey, xLabel, yLabel, neon) {{
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const pad = {{l:36, r:12, t:12, b:32}};
+  ctx.clearRect(0,0,W,H);
+
+  const xs = data.map(d => d[xKey]), ys = data.map(d => d[yKey]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xR = xMax - xMin || 1, yR = yMax - yMin || 1;
+
+  const toX = v => pad.l + (v - xMin) / xR * (W - pad.l - pad.r);
+  const toY = v => H - pad.b - (v - yMin) / yR * (H - pad.t - pad.b);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const gx = pad.l + i / 4 * (W - pad.l - pad.r);
+    const gy = H - pad.b - i / 4 * (H - pad.t - pad.b);
+    ctx.beginPath(); ctx.moveTo(gx, pad.t); ctx.lineTo(gx, H - pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(W - pad.r, gy); ctx.stroke();
+  }}
+
+  // Regression line
+  const n = data.length;
+  const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+  const cov = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0)/n;
+  const varx = xs.reduce((s,x)=>s+(x-mx)**2,0)/n;
+  if (varx > 0) {{
+    const slope = cov/varx, intercept = my - slope*mx;
+    ctx.strokeStyle = neon+'44'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    ctx.moveTo(toX(xMin), toY(slope*xMin+intercept));
+    ctx.lineTo(toX(xMax), toY(slope*xMax+intercept));
+    ctx.stroke(); ctx.setLineDash([]);
+  }}
+
+  // Dots
+  data.forEach(d => {{
+    const x = toX(d[xKey]), y = toY(d[yKey]);
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
+    ctx.fillStyle = neon+'cc'; ctx.fill();
+    ctx.strokeStyle = neon; ctx.lineWidth = 0.8; ctx.stroke();
+  }});
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(xLabel, pad.l + (W-pad.l-pad.r)/2, H-4);
+  ctx.save(); ctx.translate(9, pad.t + (H-pad.t-pad.b)/2);
+  ctx.rotate(-Math.PI/2); ctx.fillText(yLabel, 0, 0); ctx.restore();
+
+  // Axis ticks
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {{
+    const v = xMin + i/4*xR;
+    ctx.fillText(v.toFixed(1), toX(v), H-pad.b+9);
+    const vy = yMin + i/4*yR;
+    ctx.fillText(vy.toFixed(0), pad.l-3, toY(vy)+3);
+  }}
+
+  // Hover detection
+  const hitData = data.map(d => ({{x:toX(d[xKey]),y:toY(d[yKey]),d}}));
+  canvas.onmousemove = function(e) {{
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * W / rect.width;
+    const my = (e.clientY - rect.top)  * H / rect.height;
+    let best = null, bd = 999;
+    hitData.forEach(h => {{
+      const dist = Math.hypot(mx-h.x, my-h.y);
+      if (dist < bd) {{ bd = dist; best = h; }}
+    }});
+    const tip = document.getElementById(tooltipId);
+    if (best && bd < 16 && tip) {{
+      tip.textContent = best.d.p + ' — ' + xLabel + ': ' + best.d[xKey] + ' | ' + yLabel + ': ' + best.d[yKey];
+    }} else if (tip) tip.textContent = '';
+  }};
+}}
+
+function _buildKorelasiRanking(tableId, sortKey, label, fmt) {{
+  const el = document.getElementById(tableId);
+  if (!el) return;
+  const sorted = [...KORELASI].sort((a,b) => b[sortKey]-a[sortKey]).slice(0,5);
+  el.innerHTML = sorted.map((d,i) =>
+    '<tr><td style="color:rgba(255,255,255,0.35)">' + (i+1) + '</td>' +
+    '<td>' + d.p + '</td>' +
+    '<td style="color:var(--neon);text-align:right">' + fmt(d[sortKey]) + '</td></tr>'
+  ).join('');
+}}
+
+function drawKorelasi(neon) {{
+  if (!KORELASI || !KORELASI.length) return;
+  // Tambahkan risk score ke data
+  const riskMap = {{}};
+  RISK_TOP10.forEach(r => riskMap[r[0]] = r[1]);
+  const data = KORELASI.map(d => Object.assign({{}}, d, {{risk: riskMap[d.p] || 0}}));
+
+  _drawScatter('scatter-kemiskinan', 'scatter-tooltip',
+    data, 'x', 'y', 'Kemiskinan(%)', 'Krim/100k', neon);
+  _drawScatter('scatter-ipm', 'scatter-ipm-tooltip',
+    data, 'ipm', 'risk', 'IPM', 'Risk Score', neon);
+  _buildKorelasiRanking('kemiskinan-rank', 'x',   'Kemiskinan', v => v.toFixed(2)+'%');
+  _buildKorelasiRanking('pengangguran-rank','tpt','TPT', v => v.toFixed(2)+'%');
+}}
 
 function updateStats(s, neon, key) {{
   if (neon) document.documentElement.style.setProperty('--neon', neon);

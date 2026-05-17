@@ -386,6 +386,27 @@ def load_articles_full() -> pd.DataFrame:
     ]]
 
 
+def _load_sosio_ekonomi() -> dict[str, pd.DataFrame]:
+    """Load dataset sosio-ekonomi: kemiskinan, pengangguran, IPM, narkoba."""
+    result = {}
+    specs = {
+        "kemiskinan":   ("kemiskinan.csv",   ["nama_provinsi","pct_miskin","jumlah_miskin_ribu","tahun","sumber"]),
+        "pengangguran": ("pengangguran.csv",  ["nama_provinsi","tpt_pct","jumlah_pengangguran_ribu","tahun","sumber"]),
+        "ipm":          ("ipm.csv",           ["nama_provinsi","ipm","harapan_hidup","rata_lama_sekolah","pengeluaran_per_kapita","tahun","sumber"]),
+        "narkoba":      ("narkoba.csv",        ["nama_provinsi","jumlah_kasus","tersangka","prevalensi_pct","tahun","sumber"]),
+    }
+    for key, (fname, cols) in specs.items():
+        path = RAW_DIR / fname
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        df["nama_provinsi"] = df["nama_provinsi"].apply(normalize_provinsi)
+        df = df[df["nama_provinsi"].notna()]
+        existing = [c for c in cols if c in df.columns]
+        result[key] = df[existing]
+    return result
+
+
 def save_to_sqlite(df_official: pd.DataFrame, df_news: pd.DataFrame,
                    df_tweets: pd.DataFrame, df_final: pd.DataFrame,
                    df_articles: pd.DataFrame,
@@ -405,6 +426,10 @@ def save_to_sqlite(df_official: pd.DataFrame, df_news: pd.DataFrame,
         if not df_crime_detail.empty:
             df_crime_detail.to_sql("kriminalitas_detail", conn, if_exists="replace", index=False)
             print(f"[process] {len(df_crime_detail)} baris kriminalitas_detail disimpan ke SQLite.")
+        # Simpan dataset sosio-ekonomi
+        for key, df in _load_sosio_ekonomi().items():
+            df.to_sql(key, conn, if_exists="replace", index=False)
+            print(f"[process] {len(df)} baris {key} disimpan ke SQLite.")
     print(f"[process] Database disimpan: {DB_PATH}")
 
 
