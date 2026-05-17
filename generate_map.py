@@ -126,20 +126,6 @@ LAYERS = {
         "colors": ["#001a0d", "#003320", "#006600", "#00bb33", "#00ff41"],
         "col":    "jumlah_kasus",
     },
-    "kecelakaan_lalin": {
-        "label":  "KECELAKAAN LALIN",
-        "icon":   "&#128664;",
-        "neon":   "#ffcc00",
-        "colors": ["#0d0a00", "#2d2200", "#665500", "#ccaa00", "#ffcc00"],
-        "col":    "kecelakaan_lalin",
-    },
-    "stunting": {
-        "label":  "STUNTING/GIZI BURUK",
-        "icon":   "&#129657;",
-        "neon":   "#00ccff",
-        "colors": ["#000d1a", "#001f40", "#004488", "#0088cc", "#00ccff"],
-        "col":    "stunting",
-    },
 }
 
 CRIME_TYPES = {
@@ -192,11 +178,6 @@ def _load_extra_csv(filename: str, val_col: str, prov_col: str = "nama_provinsi"
         return pd.Series(dtype=float)
     return df.set_index(prov_col)[val_col]
 
-_extra_data = {
-    "kecelakaan_lalin": _load_extra_csv("kecelakaan_lalin.csv", "jumlah_kecelakaan"),
-    "stunting":         _load_extra_csv("stunting.csv", "jumlah_balita_stunting"),
-}
-
 # Populasi per provinsi 2023 (BPS Proyeksi Penduduk)
 _POPULASI = {
     "Aceh": 5481118, "Sumatera Utara": 15114918, "Sumatera Barat": 5621197,
@@ -225,11 +206,8 @@ def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
     )
 
 data = pd.DataFrame({"id_wilayah": gdf[id_col]})
-_BASE_LAYERS = ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]
-for kat in _BASE_LAYERS:
+for kat in LAYERS:
     data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
-for kat in ["kecelakaan_lalin", "stunting"]:
-    data[kat] = data["id_wilayah"].map(_extra_data[kat]).fillna(0).astype(int)
 
 # Per-kapita: kasus per 100k penduduk
 _crime_rate_raw = _load_extra_csv("kriminalitas_rate.csv", "crime_rate_per_100k")
@@ -251,8 +229,6 @@ _per100k_data = {
     "kriminalitas":     _per100k(_to_prov_series(_data_idx["kriminalitas"]), _crime_rate_raw),
     "kekerasan_seksual":_per100k(_to_prov_series(_data_idx["kekerasan_seksual"])),
     "penyakit_menular": _per100k(_to_prov_series(_data_idx["penyakit_menular"])),
-    "kecelakaan_lalin": _per100k(_to_prov_series(_data_idx["kecelakaan_lalin"])),
-    "stunting":         _per100k(_load_extra_csv("stunting.csv", "prevalensi_stunting_pct")),
 }
 
 # Risk score: composite index 0-100 dari semua kategori (min-max normalisasi)
@@ -556,12 +532,11 @@ _TOOLTIP_ALIAS = {
     "kriminalitas":     "Kasus",
     "kekerasan_seksual":"Kasus",
     "penyakit_menular": "Kasus",
-    "kecelakaan_lalin": "Kecelakaan",
-    "stunting":         "Balita Stunting",
+
 }
 
 
-_LOG_SCALE_LAYERS = {"kecelakaan_lalin", "stunting", "penyakit_menular"}
+_LOG_SCALE_LAYERS = {"penyakit_menular"}
 
 
 def make_map(key: str) -> None:
@@ -1455,8 +1430,7 @@ HTML = f"""<!DOCTYPE html>
         <li><strong>Kriminalitas Umum</strong> — BPS Statistik Kriminal 2023 (jumlah laporan polisi per provinsi, sub-kategori 7 jenis kejahatan)</li>
         <li><strong>Kekerasan Seksual</strong> — SIMFONI-PPA Kementerian PPPA 2023 (kasus terdokumentasi yang dilaporkan)</li>
         <li><strong>Penyakit Menular</strong> — Kemenkes RI 2023 (gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis)</li>
-        <li><strong>Kecelakaan Lalin</strong> — Data Korlantas Polri 2023 (jumlah kecelakaan per provinsi)</li>
-        <li><strong>Stunting</strong> — SSGI Kemenkes 2023 (jumlah balita stunting, bukan prevalensi)</li>
+
       </ul>
       <div class="warn-box">&#9888; Data resmi bersifat <strong>statis tahun 2023</strong>. Data ini tidak diperbarui otomatis. Angka aktual mungkin berbeda dari data publikasi resmi terbaru.</div>
 
@@ -1472,14 +1446,14 @@ HTML = f"""<!DOCTYPE html>
         <li>Rata-rata dari semua kategori yang tersedia</li>
         <li>Skala ulang ke 0–100 relatif terhadap nilai tertinggi</li>
       </ul>
-      <div class="warn-box">&#9888; Risk Score <strong>bukan indikator resmi</strong> dan belum divalidasi secara statistik. Semua kategori diperlakukan setara — padahal stunting adalah <em>lagging indicator</em> (tahunan) yang tidak sebanding dengan kriminalitas (real-time). Gunakan hanya sebagai petunjuk awal.</div>
+      <div class="warn-box">&#9888; Risk Score <strong>bukan indikator resmi</strong> dan belum divalidasi secara statistik. Semua kategori diperlakukan setara. Gunakan hanya sebagai petunjuk awal.</div>
 
       <h3>Sinyal Berita (RSS)</h3>
       <p>Artikel dikumpulkan dari 40+ sumber RSS (Google News, CNN Indonesia, Tempo, Antara, Jawa Pos, Republika, Okezone). Filter kata kunci per kategori diterapkan otomatis.</p>
       <ul>
         <li><strong>Jumlah artikel ≠ jumlah kejadian.</strong> Provinsi dengan lebih banyak kantor redaksi cenderung mendapat lebih banyak liputan.</li>
         <li>Geocoding dilakukan dari teks judul/deskripsi. Artikel tanpa nama wilayah di-fallback ke koordinat ibukota provinsi.</li>
-        <li>Kategori kecelakaan lalin dan stunting tidak memiliki feed berita spesifik — titik marker akan kosong untuk dua layer ini.</li>
+
       </ul>
 
       <h3>Analisis Sentimen</h3>
@@ -1728,8 +1702,6 @@ const _STAT_NOTE = {{
   kriminalitas:     'BPS Statistik Kriminal 2023 — laporan polisi per provinsi.',
   kekerasan_seksual:'SIMFONI-PPA Kemenkes PPPA 2023 — kasus terdokumentasi.',
   penyakit_menular: 'Kemenkes RI 2023 — gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis.',
-  kecelakaan_lalin: 'Korlantas Polri 2023 — jumlah kecelakaan lalu lintas.',
-  stunting:         'SSGI Kemenkes 2023 — jumlah balita stunting (bukan prevalensi %).',
 }};
 const _HAS_BERITA = ['kriminalitas','kekerasan_seksual','penyakit_menular'];
 

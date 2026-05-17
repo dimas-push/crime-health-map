@@ -252,8 +252,7 @@ def build_final_table(
     base = pd.DataFrame([
         {"nama_provinsi": p, "kategori": k}
         for p in PROVINSI_RESMI
-        for k in ["kriminalitas", "kekerasan_seksual", "penyakit_menular",
-                   "kecelakaan_lalin", "stunting"]
+        for k in ["kriminalitas", "kekerasan_seksual", "penyakit_menular"]
     ])
 
     # Merge data resmi
@@ -419,17 +418,6 @@ def process_all() -> pd.DataFrame:
     official = load_official()
     print(f"  {len(official)} baris data resmi (3 kategori utama).")
 
-    print("\n[process] Load kecelakaan lalu lintas ...")
-    df_lalin = load_kecelakaan_lalin()
-    print(f"  {len(df_lalin)} baris kecelakaan_lalin.")
-
-    print("\n[process] Load stunting ...")
-    df_stunting = load_stunting()
-    print(f"  {len(df_stunting)} baris stunting.")
-
-    official = pd.concat([official, df_lalin, df_stunting], ignore_index=True)
-    print(f"  Total official setelah merge: {len(official)} baris.")
-
     print("\n[process] Load data berita ...")
     news = load_news()
     print(f"  {len(news)} baris agregasi berita.")
@@ -454,7 +442,7 @@ def process_all() -> pd.DataFrame:
     final.to_csv(CSV_PATH, index=False)
     print(f"[process] CSV final disimpan: {CSV_PATH}")
 
-    print(f"\n[process] Selesai. {len(final)} baris ({len(PROVINSI_RESMI)} prov x 5 kategori).")
+    print(f"\n[process] Selesai. {len(final)} baris.")
     print(final.groupby("kategori")[["jumlah_kasus", "jumlah_artikel", "jumlah_tweet"]].sum().to_string())
 
     return final
