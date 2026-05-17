@@ -501,13 +501,17 @@ def _inject_markers(html: str, articles: list[dict], neon: str,
 
 def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
                      colormap: cm.LinearColormap,
-                     tooltip_alias: str = "Kasus") -> folium.Map:
+                     tooltip_alias: str = "Kasus",
+                     extra_fields: list | None = None,
+                     extra_aliases: list | None = None) -> folium.Map:
     """Buat Folium Map dengan choropleth dan tooltip."""
     m = folium.Map(location=[-2.5, 118.0], zoom_start=5, tiles=None, zoom_control=False)
     folium.TileLayer(
         tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
         attr="© CartoDB", max_zoom=19,
     ).add_to(m)
+    fields  = [id_col, value_col] + (extra_fields or [])
+    aliases = ["Wilayah", tooltip_alias] + (extra_aliases or [])
     folium.GeoJson(
         geojson_data,
         style_function=lambda feat, cm=colormap, col=value_col: {
@@ -521,8 +525,8 @@ def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
             "color": n, "weight": 2,
         },
         tooltip=folium.GeoJsonTooltip(
-            fields=[id_col, value_col],
-            aliases=["Wilayah", tooltip_alias],
+            fields=fields,
+            aliases=aliases,
             style=(
                 f"background:#0a0a1f;color:{neon};"
                 f"font-family:'Share Tech Mono',monospace;font-size:12px;"
@@ -544,18 +548,28 @@ _TOOLTIP_ALIAS = {
 
 def make_map(key: str) -> None:
     """Buat peta choropleth per layer utama, simpan ke docs/maps/{key}.html."""
+    import json as _json
     cfg    = LAYERS[key]
     neon   = cfg["neon"]
     values = data[key]
     colormap = cm.LinearColormap(
         colors=cfg["colors"], vmin=values.min(), vmax=max(values.max(), 1),
     )
-    import json as _json
+    # Merge nilai absolut + per-kapita ke GeoJSON properties
     merged = gdf.merge(data[["id_wilayah", key]], left_on=id_col, right_on="id_wilayah", how="left")
+    p100k_col = key + "_per100k"
+    p100k_series = _per100k_data.get(key, pd.Series(dtype=float))
+    merged[p100k_col] = merged[id_col].map(p100k_series).fillna(0).round(1)
     geojson_data = _json.loads(merged.to_json())
 
     tip = _TOOLTIP_ALIAS.get(key, "Kasus")
-    m = _make_folium_map(neon, geojson_data, key, colormap, tooltip_alias=tip)
+
+    # Buat Folium map dengan tooltip yang menampilkan keduanya
+    m = _make_folium_map(neon, geojson_data, key, colormap,
+                         tooltip_alias=tip,
+                         extra_fields=[p100k_col],
+                         extra_aliases=["Per 100rb Jiwa"])
+
     html = m.get_root().render()
     html = _inject_markers(html, _articles_for(key), neon,
                            colors=cfg["colors"],
@@ -1100,6 +1114,83 @@ HTML = f"""<!DOCTYPE html>
     border-color: var(--neon);
   }}
 
+  /* ── Metodologi modal ─────────────────────────────────────── */
+  #metod-overlay {{
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }}
+  #metod-overlay.open {{ display: flex; }}
+  #metod-box {{
+    background: var(--panel); border: 1px solid var(--neon);
+    box-shadow: 0 0 48px var(--neon-glow);
+    width: min(680px, 94vw); max-height: 80vh;
+    display: flex; flex-direction: column; border-radius: var(--radius);
+    overflow: hidden;
+  }}
+  #metod-head {{
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel2); flex-shrink: 0;
+  }}
+  #metod-head h2 {{
+    font-family: var(--display); font-size: 0.8rem; font-weight: 700;
+    color: var(--neon); letter-spacing: 3px;
+  }}
+  #metod-close {{
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim2); font-family: var(--mono); font-size: 0.75rem;
+    padding: 4px 12px; border-radius: var(--radius); transition: all 0.2s;
+  }}
+  #metod-close:hover {{ border-color: var(--neon); color: var(--neon); }}
+  #metod-body {{
+    overflow-y: auto; padding: 20px 24px;
+    font-size: 0.72rem; color: rgba(255,255,255,0.6); line-height: 1.8;
+  }}
+  #metod-body::-webkit-scrollbar {{ width: 3px; }}
+  #metod-body::-webkit-scrollbar-thumb {{ background: var(--neon); }}
+  #metod-body h3 {{
+    font-family: var(--mono); font-size: 0.58rem; letter-spacing: 3px;
+    color: var(--neon); text-transform: uppercase;
+    margin: 18px 0 8px; padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }}
+  #metod-body h3:first-child {{ margin-top: 0; }}
+  #metod-body p {{ margin-bottom: 8px; }}
+  #metod-body ul {{ padding-left: 16px; margin-bottom: 8px; }}
+  #metod-body li {{ margin-bottom: 4px; }}
+  #metod-body .warn-box {{
+    background: rgba(255,180,0,0.06); border: 1px solid rgba(255,180,0,0.25);
+    border-radius: var(--radius); padding: 10px 14px; margin: 10px 0;
+    color: rgba(255,180,0,0.75); font-size: 0.68rem;
+  }}
+  .metod-btn {{
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim2); font-family: var(--mono); font-size: 0.6rem;
+    letter-spacing: 1px; padding: 3px 10px; border-radius: 2px;
+    transition: all 0.2s; cursor: pointer;
+  }}
+  .metod-btn:hover {{ border-color: var(--neon); color: var(--neon); }}
+
+  /* Data source badges */
+  .src-tag {{
+    display: inline-block; font-family: var(--mono); font-size: 0.5rem;
+    letter-spacing: 1px; padding: 2px 6px; border-radius: 2px;
+    border: 1px solid; margin: 2px;
+  }}
+  .src-resmi {{ border-color: rgba(0,255,65,0.4); color: #00ff41; background: rgba(0,255,65,0.06); }}
+  .src-berita {{ border-color: rgba(255,107,53,0.4); color: #ff9955; background: rgba(255,107,53,0.06); }}
+
+  /* Stat section header with source badge */
+  .stat-section-head {{
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }}
+  .stat-section-head span {{
+    font-family: var(--mono); font-size: 0.52rem; letter-spacing: 2px;
+    color: var(--dim2); text-transform: uppercase; flex: 1;
+  }}
+
   /* ── Responsive ────────────────────────────────────────────── */
   @media (max-width: 768px) {{
     aside {{
@@ -1134,6 +1225,7 @@ HTML = f"""<!DOCTYPE html>
     </div>
     <div class="hud-chip" id="hud-age" title="Waktu scraping terakhir">—</div>
     <div class="hud-chip" id="clk" style="font-family:'Orbitron',sans-serif;color:var(--neon)">--:--:--</div>
+    <button class="metod-btn" onclick="document.getElementById('metod-overlay').classList.add('open')" title="Metodologi & Limitasi Data">&#9432; METODOLOGI</button>
   </div>
 </header>
 
@@ -1177,59 +1269,84 @@ HTML = f"""<!DOCTYPE html>
     <!-- ── Tab: STATISTIK ─────────────────────────────────── -->
     <div class="tab-pane" id="tab-stats">
 
-      <div class="sec">Estimasi BPS 2023
-        <span style="font-size:0.5rem;color:#ffaa00;font-family:'Share Tech Mono',monospace;">&#9888; STATIS</span>
+      <!-- DATA RESMI section -->
+      <div class="stat-section-head">
+        <span>Data Resmi</span>
+        <span class="src-tag src-resmi">&#9679; BPS / KEMENKES 2023</span>
       </div>
-      <div style="font-size:0.65rem;color:rgba(255,180,0,0.5);line-height:1.6;margin-bottom:12px;">
-        Angka estimasi proporsi populasi, bukan data BPS asli.
-      </div>
+      <div id="stat-note" style="font-size:0.6rem;color:rgba(255,255,255,0.3);line-height:1.6;margin-bottom:10px;"></div>
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-lbl">Total</div><div class="stat-val" id="s-total">—</div></div>
-        <div class="stat-card"><div class="stat-lbl">Rata-rata</div><div class="stat-val" id="s-avg">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Rata-rata/Prov</div><div class="stat-val" id="s-avg">—</div></div>
         <div class="stat-card"><div class="stat-lbl">Tertinggi</div><div class="stat-val" id="s-max">—</div></div>
         <div class="stat-card"><div class="stat-lbl">Terendah</div><div class="stat-val" id="s-min">—</div></div>
-        <div class="stat-card"><div class="stat-lbl">Per 100rb Jiwa (avg)</div><div class="stat-val" id="s-per100k">—</div></div>
-        <div class="stat-card"><div class="stat-lbl">Per 100rb Jiwa (max)</div><div class="stat-val" id="s-per100k-max">—</div></div>
+        <div class="stat-card" title="Rata-rata per 100.000 penduduk. Populasi: BPS Proyeksi 2023">
+          <div class="stat-lbl">Per 100rb Jiwa &#9432;</div><div class="stat-val" id="s-per100k">—</div>
+        </div>
+        <div class="stat-card" title="Nilai tertinggi per 100.000 penduduk di antara semua provinsi">
+          <div class="stat-lbl">Maks per 100rb &#9432;</div><div class="stat-val" id="s-per100k-max">—</div>
+        </div>
       </div>
-      <div class="sec" style="margin-top:4px;">Top 5 provinsi (kasus)</div>
+      <div class="sec" style="margin-top:4px;">Top 5 (kasus absolut)</div>
       <table class="top-table">
         <thead><tr><th>#</th><th>Wilayah</th><th>Kasus</th></tr></thead>
         <tbody id="top-body"></tbody>
       </table>
-      <div class="sec" style="margin-top:8px;">Top 5 provinsi (per 100rb jiwa)</div>
+      <div class="sec" style="margin-top:8px;">Top 5 (per 100rb jiwa) &#9432;
+        <span style="font-size:0.48rem;font-family:var(--sans);text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.2)">lebih adil secara populasi</span>
+      </div>
       <table class="top-table">
         <thead><tr><th>#</th><th>Wilayah</th><th>Per 100rb</th></tr></thead>
         <tbody id="top-per100k-body"></tbody>
       </table>
 
       <hr class="div"/>
-      <div class="sec">Risk Score Provinsi
-        <span style="font-size:0.5rem;color:#ff6b35;font-family:'Share Tech Mono',monospace;">&#9679; COMPOSITE</span>
+      <!-- RISK SCORE section -->
+      <div class="stat-section-head">
+        <span>Risk Score Komposit</span>
+        <span class="src-tag src-resmi" style="color:#ff9955;border-color:rgba(255,153,85,0.4);background:rgba(255,153,85,0.06);">&#9888; EXPERIMENTAL</span>
       </div>
-      <div style="font-size:0.55rem;color:rgba(255,255,255,0.3);margin-bottom:6px;">Indeks gabungan 5 kategori, 0–100</div>
+      <div style="font-size:0.58rem;color:rgba(255,255,255,0.28);line-height:1.65;margin-bottom:8px;padding:8px;border:1px solid rgba(255,153,85,0.15);border-radius:var(--radius);">
+        Indeks 0–100 gabungan 5 kategori. Dihitung dengan min-max normalisasi per-kapita tiap kategori, lalu dirata-rata. <strong style="color:rgba(255,153,85,0.6);">Bukan ukuran resmi.</strong> Gunakan sebagai sinyal awal, bukan kesimpulan.
+      </div>
       <table class="top-table">
         <thead><tr><th>#</th><th>Provinsi</th><th>Score</th></tr></thead>
         <tbody id="risk-body"></tbody>
       </table>
 
       <hr class="div"/>
-      <div class="sec">Berita ter-geocode
-        <span style="font-size:0.5rem;color:#00ff41;font-family:'Share Tech Mono',monospace;">&#9679; LIVE</span>
+      <!-- BERITA section -->
+      <div class="stat-section-head">
+        <span>Sinyal Berita</span>
+        <span class="src-tag src-berita">&#9679; RSS LIVE</span>
+      </div>
+      <div style="font-size:0.58rem;color:rgba(255,255,255,0.28);line-height:1.65;margin-bottom:8px;">
+        Jumlah artikel per provinsi — mencerminkan <em>intensitas liputan media</em>, bukan frekuensi kejadian nyata.
       </div>
       <div class="stats-grid">
         <div class="stat-card wide">
-          <div class="stat-lbl">Total artikel terdeteksi</div>
+          <div class="stat-lbl">Total artikel ter-geocode</div>
           <div class="stat-val" id="n-total">—</div>
         </div>
       </div>
-      <div class="sec" style="margin-top:4px;">Top 5 (dari berita)</div>
+      <div id="news-empty-note" style="display:none;font-size:0.6rem;color:rgba(255,180,0,0.5);padding:6px 8px;border:1px solid rgba(255,180,0,0.15);border-radius:var(--radius);margin-bottom:8px;">
+        &#9888; Tidak ada berita ter-geocode untuk kategori ini. Data di atas berasal dari data resmi saja.
+      </div>
+      <div class="sec" style="margin-top:4px;">Top 5 provinsi</div>
       <table class="top-table">
-        <thead><tr><th>#</th><th>Wilayah</th><th>Berita</th></tr></thead>
+        <thead><tr><th>#</th><th>Wilayah</th><th>Artikel</th></tr></thead>
         <tbody id="news-top-body"></tbody>
       </table>
 
       <hr class="div"/>
-      <div class="sec">Analisis sentimen</div>
+      <!-- SENTIMEN section -->
+      <div class="stat-section-head">
+        <span>Tone Liputan Media</span>
+        <span class="src-tag src-berita">&#9679; NLP</span>
+      </div>
+      <div style="font-size:0.58rem;color:rgba(255,255,255,0.28);line-height:1.65;margin-bottom:8px;">
+        Tone artikel berita — bukan sentimen terhadap isu. "Positif" = liputan apresiasi/solusi; "Negatif" = liputan insiden/kritik.
+      </div>
       <div id="sent-panel" style="margin-top:4px;">
         <div class="sent-row">
           <span class="sent-label">Negatif</span>
@@ -1249,8 +1366,13 @@ HTML = f"""<!DOCTYPE html>
       </div>
 
       <hr class="div"/>
-      <div class="sec">Tren mingguan (12 minggu)</div>
-      <canvas id="trend-chart" width="220" height="70" style="width:100%;margin-top:4px;display:block;"></canvas>
+      <div class="sec">Tren liputan mingguan (12 minggu)</div>
+      <div style="font-size:0.55rem;color:rgba(255,255,255,0.2);margin-bottom:4px;">Jumlah artikel berita per minggu</div>
+      <div style="position:relative;">
+        <canvas id="trend-chart" width="220" height="80" style="width:100%;display:block;"></canvas>
+        <div id="trend-ymax" style="position:absolute;top:2px;right:0;font-family:var(--mono);font-size:0.5rem;color:rgba(255,255,255,0.25);"></div>
+        <div id="trend-ymin" style="position:absolute;bottom:2px;right:0;font-family:var(--mono);font-size:0.5rem;color:rgba(255,255,255,0.25);">0</div>
+      </div>
     </div>
 
     <!-- ── Tab: FILTER ────────────────────────────────────── -->
@@ -1295,6 +1417,60 @@ HTML = f"""<!DOCTYPE html>
 
 <!-- Mobile sidebar toggle -->
 <button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">&#9776;</button>
+
+<!-- ── Modal Metodologi ──────────────────────────────────────── -->
+<div id="metod-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div id="metod-box">
+    <div id="metod-head">
+      <h2>&#9432; METODOLOGI &amp; LIMITASI DATA</h2>
+      <button id="metod-close" onclick="document.getElementById('metod-overlay').classList.remove('open')">&#10005; TUTUP</button>
+    </div>
+    <div id="metod-body">
+      <h3>Sumber Data Resmi</h3>
+      <ul>
+        <li><strong>Kriminalitas Umum</strong> — BPS Statistik Kriminal 2023 (jumlah laporan polisi per provinsi, sub-kategori 7 jenis kejahatan)</li>
+        <li><strong>Kekerasan Seksual</strong> — SIMFONI-PPA Kementerian PPPA 2023 (kasus terdokumentasi yang dilaporkan)</li>
+        <li><strong>Penyakit Menular</strong> — Kemenkes RI 2023 (gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis)</li>
+        <li><strong>Kecelakaan Lalin</strong> — Data Korlantas Polri 2023 (jumlah kecelakaan per provinsi)</li>
+        <li><strong>Stunting</strong> — SSGI Kemenkes 2023 (jumlah balita stunting, bukan prevalensi)</li>
+      </ul>
+      <div class="warn-box">&#9888; Data resmi bersifat <strong>statis tahun 2023</strong>. Data ini tidak diperbarui otomatis. Angka aktual mungkin berbeda dari data publikasi resmi terbaru.</div>
+
+      <h3>Normalisasi Per Kapita</h3>
+      <p>Angka "Per 100rb Jiwa" dihitung menggunakan <strong>Proyeksi Penduduk BPS 2023</strong> per provinsi. Untuk kriminalitas, digunakan <em>crime rate</em> resmi dari BPS Statistik Kriminal. Untuk kategori lain, dihitung manual: (jumlah kasus / populasi) × 100.000.</p>
+      <p>Normalisasi ini penting karena provinsi berpenduduk besar (Jawa Timur, Jawa Barat) hampir selalu unggul secara absolut, meski tidak selalu paling berisiko per kapita.</p>
+
+      <h3>Risk Score Komposit</h3>
+      <p>Indeks eksperimental 0–100 yang menggabungkan 5 kategori dengan langkah:</p>
+      <ul>
+        <li>Hitung nilai per-kapita tiap kategori per provinsi</li>
+        <li>Normalisasi min-max (0–1) dalam tiap kategori</li>
+        <li>Rata-rata dari semua kategori yang tersedia</li>
+        <li>Skala ulang ke 0–100 relatif terhadap nilai tertinggi</li>
+      </ul>
+      <div class="warn-box">&#9888; Risk Score <strong>bukan indikator resmi</strong> dan belum divalidasi secara statistik. Semua kategori diperlakukan setara — padahal stunting adalah <em>lagging indicator</em> (tahunan) yang tidak sebanding dengan kriminalitas (real-time). Gunakan hanya sebagai petunjuk awal.</div>
+
+      <h3>Sinyal Berita (RSS)</h3>
+      <p>Artikel dikumpulkan dari 40+ sumber RSS (Google News, CNN Indonesia, Tempo, Antara, Jawa Pos, Republika, Okezone). Filter kata kunci per kategori diterapkan otomatis.</p>
+      <ul>
+        <li><strong>Jumlah artikel ≠ jumlah kejadian.</strong> Provinsi dengan lebih banyak kantor redaksi cenderung mendapat lebih banyak liputan.</li>
+        <li>Geocoding dilakukan dari teks judul/deskripsi. Artikel tanpa nama wilayah di-fallback ke koordinat ibukota provinsi.</li>
+        <li>Kategori kecelakaan lalin dan stunting tidak memiliki feed berita spesifik — titik marker akan kosong untuk dua layer ini.</li>
+      </ul>
+
+      <h3>Analisis Sentimen</h3>
+      <p>Sentimen dianalisis menggunakan rule-based NLP (IndoBERT fallback). Label yang dihasilkan mencerminkan <strong>tone liputan media</strong>, bukan kondisi di lapangan. "Positif" berarti artikel ditulis dengan framing apresiasi/penyelesaian; "Negatif" berarti framing insiden/kritik. Ini tidak berarti situasi di lapangan membaik atau memburuk.</p>
+
+      <h3>Limitasi Umum</h3>
+      <ul>
+        <li>Underreporting: tidak semua kejadian dilaporkan ke polisi atau tercatat oleh media</li>
+        <li>Definisi kategori berbeda antar lembaga (mis. "penyakit menular" bisa berbeda cakupannya)</li>
+        <li>Data berita real-time dan data resmi 2023 tidak sebanding — jangan dibandingkan langsung</li>
+        <li>Dashboard ini dibuat untuk keperluan riset dan eksplorasi data, bukan pengambilan kebijakan</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <!-- ── Panel detail artikel ─────────────────────────────────── -->
 <div id="art-panel">
@@ -1456,66 +1632,116 @@ function drawTrend(key, neon) {{
   if (!canvas || !canvas.getContext) return;
   const t = (TREND && TREND[key]) ? TREND[key] : null;
   const ctx = canvas.getContext('2d');
-  const W = canvas.offsetWidth || 220, H = canvas.offsetHeight || 70;
+  const W = canvas.offsetWidth || 220, H = 80;
   canvas.width = W; canvas.height = H;
   ctx.clearRect(0, 0, W, H);
-  if (!t || !t.counts || t.counts.length < 2) {{
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+
+  const ymaxEl = document.getElementById('trend-ymax');
+  const yminEl = document.getElementById('trend-ymin');
+
+  if (!t || !t.counts || t.counts.length < 2 || Math.max(...t.counts) === 0) {{
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.font = '10px monospace';
-    ctx.fillText('Belum ada data tren', 8, H/2);
+    ctx.fillText('Belum ada data liputan berita', 8, H/2);
+    if (ymaxEl) ymaxEl.textContent = '';
+    if (yminEl) yminEl.textContent = '0';
     return;
   }}
   const counts = t.counts;
   const mx = Math.max(...counts, 1);
-  const pad = 4;
-  const stepX = (W - pad*2) / (counts.length - 1);
+  const padL = 4, padR = 28, padT = 6, padB = 4;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const stepX  = chartW / (counts.length - 1);
+
+  // Y-axis labels
+  if (ymaxEl) ymaxEl.textContent = mx;
+  if (yminEl) yminEl.textContent = '0';
+
+  // Baseline grid
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  ctx.moveTo(padL, padT + chartH/2);
+  ctx.lineTo(padL + chartW, padT + chartH/2);
+  ctx.stroke();
+
   // Fill area
   ctx.beginPath();
-  ctx.moveTo(pad, H - pad - (counts[0]/mx)*(H-pad*2));
-  counts.forEach((v,i) => ctx.lineTo(pad + i*stepX, H - pad - (v/mx)*(H-pad*2)));
-  ctx.lineTo(pad + (counts.length-1)*stepX, H-pad);
-  ctx.lineTo(pad, H-pad);
+  ctx.moveTo(padL, padT + chartH - (counts[0]/mx)*chartH);
+  counts.forEach((v,i) => ctx.lineTo(padL + i*stepX, padT + chartH - (v/mx)*chartH));
+  ctx.lineTo(padL + (counts.length-1)*stepX, padT + chartH);
+  ctx.lineTo(padL, padT + chartH);
   ctx.closePath();
-  ctx.fillStyle = neon + '22';
+  ctx.fillStyle = neon + '1a';
   ctx.fill();
+
   // Line
   ctx.beginPath();
   ctx.strokeStyle = neon;
   ctx.lineWidth = 1.5;
   counts.forEach((v,i) => {{
-    const x = pad + i*stepX, y = H - pad - (v/mx)*(H-pad*2);
+    const x = padL + i*stepX, y = padT + chartH - (v/mx)*chartH;
     i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
   }});
   ctx.stroke();
-  // Dots at max
+
+  // Dot at max
   const maxIdx = counts.indexOf(mx);
+  const dotX = padL + maxIdx*stepX, dotY = padT;
   ctx.beginPath();
-  ctx.arc(pad+maxIdx*stepX, H-pad-(mx/mx)*(H-pad*2), 3, 0, Math.PI*2);
+  ctx.arc(dotX, dotY, 3, 0, Math.PI*2);
   ctx.fillStyle = neon;
   ctx.fill();
+
+  // Label nilai max di dot
+  ctx.fillStyle = neon;
+  ctx.font = '9px monospace';
+  ctx.fillText(mx, dotX - (mx >= 10 ? 8 : 4), dotY - 5);
 }}
+
+const _STAT_NOTE = {{
+  kriminalitas:     'BPS Statistik Kriminal 2023 — laporan polisi per provinsi.',
+  kekerasan_seksual:'SIMFONI-PPA Kemenkes PPPA 2023 — kasus terdokumentasi.',
+  penyakit_menular: 'Kemenkes RI 2023 — gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis.',
+  kecelakaan_lalin: 'Korlantas Polri 2023 — jumlah kecelakaan lalu lintas.',
+  stunting:         'SSGI Kemenkes 2023 — jumlah balita stunting (bukan prevalensi %).',
+}};
+const _HAS_BERITA = ['kriminalitas','kekerasan_seksual','penyakit_menular'];
 
 function updateStats(s, neon, key) {{
   if (neon) document.documentElement.style.setProperty('--neon', neon);
+
+  // Stat note per layer
+  const noteEl = document.getElementById('stat-note');
+  if (noteEl && key) noteEl.textContent = _STAT_NOTE[key] || '';
+
   document.getElementById('s-total').textContent = (s.total||0).toLocaleString('id-ID');
   document.getElementById('s-avg').textContent   = (s.avg||0).toLocaleString('id-ID');
   document.getElementById('s-max').textContent   = (s.max||0).toLocaleString('id-ID');
   document.getElementById('s-min').textContent   = (s.min||0).toLocaleString('id-ID');
   document.getElementById('s-per100k').textContent     = (s.per100k_avg||0).toLocaleString('id-ID');
   document.getElementById('s-per100k-max').textContent = (s.per100k_max||0).toLocaleString('id-ID');
+
+  const emptyRow = '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
   document.getElementById('top-body').innerHTML  = (s.top||[]).map(([w,k],i) =>
     `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
      <td class="td-val">${{Number(k).toLocaleString('id-ID')}}</td></tr>`
-  ).join('');
-  const emptyRow = '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
+  ).join('') || emptyRow;
   document.getElementById('top-per100k-body').innerHTML = (s.top_per100k||[]).map(([w,k],i) =>
     `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
      <td class="td-val">${{Number(k).toFixed(1)}}</td></tr>`
   ).join('') || emptyRow;
   document.getElementById('risk-body').innerHTML = (RISK_TOP10||[]).map(([w,k],i) =>
     `<tr><td><span class="rank">${{i+1}}.</span></td><td>${{w}}</td>
-     <td class="td-val" style="color:#ff6b35">${{Number(k).toFixed(1)}}</td></tr>`
+     <td class="td-val" style="color:#ff9955">${{Number(k).toFixed(1)}}</td></tr>`
   ).join('') || emptyRow;
+
+  // Berita section — tampilkan empty note untuk layer tanpa berita
+  const hasBerita = key && _HAS_BERITA.includes(key);
+  const emptyNoteEl = document.getElementById('news-empty-note');
+  if (emptyNoteEl) emptyNoteEl.style.display = hasBerita ? 'none' : 'block';
+
   if (key && NEWS_STATS[key]) {{
     const ns = NEWS_STATS[key];
     document.getElementById('n-total').textContent = (ns.total||0).toLocaleString('id-ID');
