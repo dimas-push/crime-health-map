@@ -8,6 +8,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import math
+
 import branca.colormap as cm
 import folium
 import pandas as pd
@@ -503,7 +505,8 @@ def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
                      colormap: cm.LinearColormap,
                      tooltip_alias: str = "Kasus",
                      extra_fields: list | None = None,
-                     extra_aliases: list | None = None) -> folium.Map:
+                     extra_aliases: list | None = None,
+                     log_scale: bool = False) -> folium.Map:
     """Buat Folium Map dengan choropleth dan tooltip."""
     m = folium.Map(location=[-2.5, 118.0], zoom_start=5, tiles=None, zoom_control=False)
     folium.TileLayer(
@@ -512,14 +515,26 @@ def _make_folium_map(neon: str, geojson_data: dict, value_col: str,
     ).add_to(m)
     fields  = [id_col, value_col] + (extra_fields or [])
     aliases = ["Wilayah", tooltip_alias] + (extra_aliases or [])
+    if log_scale:
+        def _style(feat, _cm=colormap, _col=value_col):
+            v = feat["properties"].get(_col) or 0
+            return {
+                "fillColor":   _cm(math.log1p(v)),
+                "fillOpacity": 0.75,
+                "color":       "#0a0a1f",
+                "weight":      0.8,
+            }
+    else:
+        def _style(feat, _cm=colormap, _col=value_col):
+            return {
+                "fillColor":   _cm(feat["properties"].get(_col) or 0),
+                "fillOpacity": 0.75,
+                "color":       "#0a0a1f",
+                "weight":      0.8,
+            }
     folium.GeoJson(
         geojson_data,
-        style_function=lambda feat, cm=colormap, col=value_col: {
-            "fillColor":   cm(feat["properties"].get(col) or 0),
-            "fillOpacity": 0.75,
-            "color":       "#0a0a1f",
-            "weight":      0.8,
-        },
+        style_function=_style,
         highlight_function=lambda _, n=neon: {
             "fillColor": n, "fillOpacity": 0.35,
             "color": n, "weight": 2,
@@ -546,15 +561,23 @@ _TOOLTIP_ALIAS = {
 }
 
 
+_LOG_SCALE_LAYERS = {"kecelakaan_lalin", "stunting", "penyakit_menular"}
+
+
 def make_map(key: str) -> None:
     """Buat peta choropleth per layer utama, simpan ke docs/maps/{key}.html."""
     import json as _json
     cfg    = LAYERS[key]
     neon   = cfg["neon"]
     values = data[key]
-    colormap = cm.LinearColormap(
-        colors=cfg["colors"], vmin=values.min(), vmax=max(values.max(), 1),
-    )
+    use_log = key in _LOG_SCALE_LAYERS
+    if use_log:
+        vmin = math.log1p(float(values.min()))
+        vmax = math.log1p(float(max(values.max(), 1)))
+    else:
+        vmin = float(values.min())
+        vmax = float(max(values.max(), 1))
+    colormap = cm.LinearColormap(colors=cfg["colors"], vmin=vmin, vmax=vmax)
     # Merge nilai absolut + per-kapita ke GeoJSON properties
     merged = gdf.merge(data[["id_wilayah", key]], left_on=id_col, right_on="id_wilayah", how="left")
     p100k_col = key + "_per100k"
@@ -568,7 +591,8 @@ def make_map(key: str) -> None:
     m = _make_folium_map(neon, geojson_data, key, colormap,
                          tooltip_alias=tip,
                          extra_fields=[p100k_col],
-                         extra_aliases=["Per 100rb Jiwa"])
+                         extra_aliases=["Per 100rb Jiwa"],
+                         log_scale=use_log)
 
     html = m.get_root().render()
     html = _inject_markers(html, _articles_for(key), neon,
