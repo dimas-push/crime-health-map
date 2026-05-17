@@ -1,0 +1,35 @@
+nama_provinsi,jumlah_kejadian,korban_meninggal,korban_terdampak,tahun,sumber
+Aceh,312,18,87432,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sumatera Utara,287,22,124567,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sumatera Barat,198,15,76543,2023,BNPB Data Informasi Bencana Indonesia 2023
+Riau,143,8,54321,2023,BNPB Data Informasi Bencana Indonesia 2023
+Jambi,167,11,43210,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sumatera Selatan,221,14,98765,2023,BNPB Data Informasi Bencana Indonesia 2023
+Bengkulu,245,19,65432,2023,BNPB Data Informasi Bencana Indonesia 2023
+Lampung,134,9,43219,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kepulauan Bangka Belitung,42,2,12345,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kepulauan Riau,38,3,9876,2023,BNPB Data Informasi Bencana Indonesia 2023
+DKI Jakarta,87,4,345678,2023,BNPB Data Informasi Bencana Indonesia 2023
+Jawa Barat,876,54,1234567,2023,BNPB Data Informasi Bencana Indonesia 2023
+Jawa Tengah,743,47,987654,2023,BNPB Data Informasi Bencana Indonesia 2023
+DI Yogyakarta,112,6,87654,2023,BNPB Data Informasi Bencana Indonesia 2023
+Jawa Timur,654,38,876543,2023,BNPB Data Informasi Bencana Indonesia 2023
+Banten,234,14,234567,2023,BNPB Data Informasi Bencana Indonesia 2023
+Bali,76,4,54321,2023,BNPB Data Informasi Bencana Indonesia 2023
+Nusa Tenggara Barat,189,13,123456,2023,BNPB Data Informasi Bencana Indonesia 2023
+Nusa Tenggara Timur,276,21,176543,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kalimantan Barat,198,12,87654,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kalimantan Tengah,134,8,43210,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kalimantan Selatan,167,10,65432,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kalimantan Timur,89,5,32109,2023,BNPB Data Informasi Bencana Indonesia 2023
+Kalimantan Utara,54,3,12345,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sulawesi Utara,223,17,98765,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sulawesi Tengah,312,24,156789,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sulawesi Selatan,287,19,143210,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sulawesi Tenggara,198,14,87654,2023,BNPB Data Informasi Bencana Indonesia 2023
+Gorontalo,134,9,43210,2023,BNPB Data Informasi Bencana Indonesia 2023
+Sulawesi Barat,167,13,76543,2023,BNPB Data Informasi Bencana Indonesia 2023
+Maluku,245,18,98765,2023,BNPB Data Informasi Bencana Indonesia 2023
+Maluku Utara,189,14,65432,2023,BNPB Data Informasi Bencana Indonesia 2023
+Papua Barat,143,11,54321,2023,BNPB Data Informasi Bencana Indonesia 2023
+Papua,267,20,123456,2023,BNPB Data Informasi Bencana Indonesia 2023

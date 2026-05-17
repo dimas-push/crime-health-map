@@ -148,6 +148,16 @@ KEYWORDS = {
         "kematian ibu", "kematian bayi", "imunisasi", "vaksinasi",
         "pos yandu", "program kesehatan", "angka kematian",
     ],
+    "bencana_alam": [
+        "bencana alam", "banjir", "tanah longsor", "longsor", "gempa bumi", "gempa",
+        "tsunami", "erupsi", "gunung meletus", "kebakaran hutan", "karhutla",
+        "angin kencang", "puting beliung", "banjir bandang", "abrasi",
+        "kekeringan", "rob", "banjir rob", "BNPB", "BPBD", "status siaga",
+        "status darurat", "evakuasi bencana", "korban bencana", "terdampak bencana",
+        "relawan bencana", "banjir merendam", "rumah hanyut", "jembatan putus",
+        "akses terputus", "pengungsian", "posko bencana", "curah hujan tinggi",
+        "peringatan dini", "early warning", "bencana hidrometeorologi",
+    ],
 }
 
 # Nama 34 provinsi untuk ekstraksi lokasi dari teks
@@ -206,7 +216,7 @@ def _detect_kategori(teks: str) -> Optional[str]:
     """Deteksi kategori artikel berdasarkan kata kunci (case-insensitive)."""
     teks_lower = teks.lower()
     # Kekerasan seksual diperiksa lebih dulu karena kata kuncinya spesifik
-    for kategori in ["kekerasan_seksual", "kriminalitas", "penyakit_menular"]:
+    for kategori in ["kekerasan_seksual", "kriminalitas", "penyakit_menular", "bencana_alam"]:
         for kw in KEYWORDS[kategori]:
             if kw.lower() in teks_lower:
                 return kategori

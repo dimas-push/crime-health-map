@@ -126,6 +126,13 @@ LAYERS = {
         "colors": ["#001a0d", "#003320", "#006600", "#00bb33", "#00ff41"],
         "col":    "jumlah_kasus",
     },
+    "bencana_alam": {
+        "label":  "BENCANA ALAM",
+        "icon":   "&#127754;",
+        "neon":   "#ff4500",
+        "colors": ["#1a0500", "#3d0f00", "#801f00", "#cc4400", "#ff4500"],
+        "col":    "bencana_alam",
+    },
 }
 
 CRIME_TYPES = {
@@ -205,9 +212,14 @@ def _pivot(df: pd.DataFrame, kategori: str) -> pd.Series:
         .sum()
     )
 
+_bencana_series = _load_extra_csv("bencana_alam.csv", "jumlah_kejadian")
+
 data = pd.DataFrame({"id_wilayah": gdf[id_col]})
 for kat in LAYERS:
-    data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
+    if kat == "bencana_alam":
+        data[kat] = data["id_wilayah"].map(_bencana_series).fillna(0).astype(int)
+    else:
+        data[kat] = data["id_wilayah"].map(_pivot(df_final, kat)).fillna(0).astype(int)
 
 # Per-kapita: kasus per 100k penduduk
 _crime_rate_raw = _load_extra_csv("kriminalitas_rate.csv", "crime_rate_per_100k")
@@ -229,6 +241,7 @@ _per100k_data = {
     "kriminalitas":     _per100k(_to_prov_series(_data_idx["kriminalitas"]), _crime_rate_raw),
     "kekerasan_seksual":_per100k(_to_prov_series(_data_idx["kekerasan_seksual"])),
     "penyakit_menular": _per100k(_to_prov_series(_data_idx["penyakit_menular"])),
+    "bencana_alam":     _per100k(_to_prov_series(_data_idx["bencana_alam"])),
 }
 
 # Risk score: composite index 0-100 dari semua kategori (min-max normalisasi)
@@ -532,11 +545,11 @@ _TOOLTIP_ALIAS = {
     "kriminalitas":     "Kasus",
     "kekerasan_seksual":"Kasus",
     "penyakit_menular": "Kasus",
-
+    "bencana_alam":     "Kejadian",
 }
 
 
-_LOG_SCALE_LAYERS = {"penyakit_menular"}
+_LOG_SCALE_LAYERS = {"penyakit_menular", "bencana_alam"}
 
 
 def make_map(key: str) -> None:
@@ -1430,7 +1443,7 @@ HTML = f"""<!DOCTYPE html>
         <li><strong>Kriminalitas Umum</strong> — BPS Statistik Kriminal 2023 (jumlah laporan polisi per provinsi, sub-kategori 7 jenis kejahatan)</li>
         <li><strong>Kekerasan Seksual</strong> — SIMFONI-PPA Kementerian PPPA 2023 (kasus terdokumentasi yang dilaporkan)</li>
         <li><strong>Penyakit Menular</strong> — Kemenkes RI 2023 (gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis)</li>
-
+        <li><strong>Bencana Alam</strong> — BNPB Data Informasi Bencana Indonesia 2023 (jumlah kejadian bencana per provinsi)</li>
       </ul>
       <div class="warn-box">&#9888; Data resmi bersifat <strong>statis tahun 2023</strong>. Data ini tidak diperbarui otomatis. Angka aktual mungkin berbeda dari data publikasi resmi terbaru.</div>
 
@@ -1439,7 +1452,7 @@ HTML = f"""<!DOCTYPE html>
       <p>Normalisasi ini penting karena provinsi berpenduduk besar (Jawa Timur, Jawa Barat) hampir selalu unggul secara absolut, meski tidak selalu paling berisiko per kapita.</p>
 
       <h3>Risk Score Komposit</h3>
-      <p>Indeks eksperimental 0–100 yang menggabungkan 5 kategori dengan langkah:</p>
+      <p>Indeks eksperimental 0–100 yang menggabungkan 4 kategori dengan langkah:</p>
       <ul>
         <li>Hitung nilai per-kapita tiap kategori per provinsi</li>
         <li>Normalisasi min-max (0–1) dalam tiap kategori</li>
@@ -1702,8 +1715,9 @@ const _STAT_NOTE = {{
   kriminalitas:     'BPS Statistik Kriminal 2023 — laporan polisi per provinsi.',
   kekerasan_seksual:'SIMFONI-PPA Kemenkes PPPA 2023 — kasus terdokumentasi.',
   penyakit_menular: 'Kemenkes RI 2023 — gabungan DBD, TBC, HIV/AIDS, malaria, hepatitis.',
+  bencana_alam:     'BNPB DIBI 2023 — jumlah kejadian bencana (banjir, longsor, gempa, dll).',
 }};
-const _HAS_BERITA = ['kriminalitas','kekerasan_seksual','penyakit_menular'];
+const _HAS_BERITA = ['kriminalitas','kekerasan_seksual','penyakit_menular','bencana_alam'];
 
 function updateStats(s, neon, key) {{
   if (neon) document.documentElement.style.setProperty('--neon', neon);
