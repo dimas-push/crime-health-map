@@ -31,48 +31,71 @@ CSV_PATH = PROCESSED_DIR / "final.csv"
 # Tabel normalisasi nama provinsi (berbagai ejaan → nama resmi BPS)
 # ---------------------------------------------------------------------------
 PROV_NORMALIZE = {
-    # Alias umum
-    "jakarta":                   "DKI Jakarta",
-    "dki jakarta":               "DKI Jakarta",
-    "yogyakarta":                "DI Yogyakarta",
-    "di yogyakarta":             "DI Yogyakarta",
-    "bangka belitung":           "Kepulauan Bangka Belitung",
-    "kepulauan bangka belitung": "Kepulauan Bangka Belitung",
-    "kepri":                     "Kepulauan Riau",
-    "ntb":                       "Nusa Tenggara Barat",
-    "ntt":                       "Nusa Tenggara Timur",
-    "kalbar":                    "Kalimantan Barat",
-    "kalteng":                   "Kalimantan Tengah",
-    "kalsel":                    "Kalimantan Selatan",
-    "kaltim":                    "Kalimantan Timur",
-    "kaltara":                   "Kalimantan Utara",
-    "sulut":                     "Sulawesi Utara",
-    "sulteng":                   "Sulawesi Tengah",
-    "sulsel":                    "Sulawesi Selatan",
-    "sultra":                    "Sulawesi Tenggara",
-    "sulbar":                    "Sulawesi Barat",
-    "malut":                     "Maluku Utara",
-    "papua barat":               "Papua Barat",
-    "sumut":                     "Sumatera Utara",
-    "sumbar":                    "Sumatera Barat",
-    "sumsel":                    "Sumatera Selatan",
-    "jabar":                     "Jawa Barat",
-    "jateng":                    "Jawa Tengah",
-    "jatim":                     "Jawa Timur",
-    # Alias yang sebelumnya hilang
-    "aceh":                      "Aceh",
-    "nad":                       "Aceh",
-    "nanggroe aceh darussalam":  "Aceh",
-    "riau":                      "Riau",
-    "jambi":                     "Jambi",
-    "bengkulu":                  "Bengkulu",
-    "lampung":                   "Lampung",
-    "banten":                    "Banten",
-    "bali":                      "Bali",
-    "gorontalo":                 "Gorontalo",
-    "maluku":                    "Maluku",
-    "papua":                     "Papua",
-    "papua barat daya":          "Papua Barat",
+    # Nama resmi lengkap → mapping eksplisit (prioritas tertinggi)
+    "aceh":                           "Aceh",
+    "nad":                            "Aceh",
+    "nanggroe aceh darussalam":       "Aceh",
+    "sumatera utara":                 "Sumatera Utara",
+    "sumut":                          "Sumatera Utara",
+    "sumatera barat":                 "Sumatera Barat",
+    "sumbar":                         "Sumatera Barat",
+    "riau":                           "Riau",
+    "jambi":                          "Jambi",
+    "sumatera selatan":               "Sumatera Selatan",
+    "sumsel":                         "Sumatera Selatan",
+    "bengkulu":                       "Bengkulu",
+    "lampung":                        "Lampung",
+    "kepulauan bangka belitung":      "Kepulauan Bangka Belitung",
+    "bangka belitung":                "Kepulauan Bangka Belitung",
+    "babel":                          "Kepulauan Bangka Belitung",
+    # Kepulauan Riau harus eksplisit sebelum "riau" di partial match
+    "kepulauan riau":                 "Kepulauan Riau",
+    "kepri":                          "Kepulauan Riau",
+    "dki jakarta":                    "DKI Jakarta",
+    "jakarta":                        "DKI Jakarta",
+    "jawa barat":                     "Jawa Barat",
+    "jabar":                          "Jawa Barat",
+    "jawa tengah":                    "Jawa Tengah",
+    "jateng":                         "Jawa Tengah",
+    "di yogyakarta":                  "DI Yogyakarta",
+    "yogyakarta":                     "DI Yogyakarta",
+    "diy":                            "DI Yogyakarta",
+    "jawa timur":                     "Jawa Timur",
+    "jatim":                          "Jawa Timur",
+    "banten":                         "Banten",
+    "bali":                           "Bali",
+    "nusa tenggara barat":            "Nusa Tenggara Barat",
+    "ntb":                            "Nusa Tenggara Barat",
+    "nusa tenggara timur":            "Nusa Tenggara Timur",
+    "ntt":                            "Nusa Tenggara Timur",
+    "kalimantan barat":               "Kalimantan Barat",
+    "kalbar":                         "Kalimantan Barat",
+    "kalimantan tengah":              "Kalimantan Tengah",
+    "kalteng":                        "Kalimantan Tengah",
+    "kalimantan selatan":             "Kalimantan Selatan",
+    "kalsel":                         "Kalimantan Selatan",
+    "kalimantan timur":               "Kalimantan Timur",
+    "kaltim":                         "Kalimantan Timur",
+    "kalimantan utara":               "Kalimantan Utara",
+    "kaltara":                        "Kalimantan Utara",
+    "sulawesi utara":                 "Sulawesi Utara",
+    "sulut":                          "Sulawesi Utara",
+    "sulawesi tengah":                "Sulawesi Tengah",
+    "sulteng":                        "Sulawesi Tengah",
+    "sulawesi selatan":               "Sulawesi Selatan",
+    "sulsel":                         "Sulawesi Selatan",
+    "sulawesi tenggara":              "Sulawesi Tenggara",
+    "sultra":                         "Sulawesi Tenggara",
+    "gorontalo":                      "Gorontalo",
+    "sulawesi barat":                 "Sulawesi Barat",
+    "sulbar":                         "Sulawesi Barat",
+    "maluku":                         "Maluku",
+    # Maluku Utara harus eksplisit sebelum "maluku" di partial match
+    "maluku utara":                   "Maluku Utara",
+    "malut":                          "Maluku Utara",
+    "papua barat daya":               "Papua Barat",
+    "papua barat":                    "Papua Barat",
+    "papua":                          "Papua",
 }
 
 # Nama resmi 34 provinsi
@@ -348,6 +371,12 @@ def load_articles_full() -> pd.DataFrame:
         mask = missing_coords & (df["provinsi"] == prov)
         df.loc[mask, "lat"] = coords[0]
         df.loc[mask, "lon"] = coords[1]
+
+    # Isi provinsi NULL jika koordinat tersedia dan bisa di-infer dari provinsi terdekat
+    # (tidak bisa dilakukan tanpa reverse geocoding — biarkan NULL, tapi isi dari kolom kabupaten jika ada)
+    if "kabupaten" in df.columns:
+        missing_prov = df["provinsi"].isna() & df["kabupaten"].notna()
+        df.loc[missing_prov, "provinsi"] = df.loc[missing_prov, "kabupaten"].apply(normalize_provinsi)
 
     df = df[df["lat"].notna() & df["lon"].notna()].copy()
     before_recover = (df["lat"].notna()).sum()
