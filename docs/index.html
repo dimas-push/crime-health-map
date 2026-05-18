@@ -449,6 +449,118 @@
   }
   .metod-btn:hover { border-color: var(--neon); color: var(--neon); }
 
+  /* ── Intro banner (onboarding) ────────────────────────────── */
+  #intro-banner {
+    position: fixed; inset: 0; z-index: 3000;
+    background: rgba(5,5,16,0.97); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  #intro-banner.hidden { display: none; }
+  .intro-box {
+    background: var(--panel); border: 1px solid var(--neon);
+    box-shadow: 0 0 60px var(--neon-glow);
+    width: min(540px, 96vw); border-radius: var(--radius); overflow: hidden;
+  }
+  .intro-head {
+    background: var(--panel2); padding: 24px 28px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06); text-align: center;
+  }
+  .intro-logo {
+    font-family: var(--display); font-size: 1.2rem; font-weight: 900;
+    color: var(--neon); letter-spacing: 5px; margin-bottom: 6px;
+  }
+  .intro-tagline {
+    font-family: var(--mono); font-size: 0.58rem; letter-spacing: 2px;
+    color: rgba(255,255,255,0.3);
+  }
+  .intro-body { padding: 20px 28px 24px; }
+  .intro-desc {
+    font-size: 0.84rem; color: rgba(255,255,255,0.7); line-height: 1.75;
+    margin-bottom: 18px; text-align: center;
+  }
+  .intro-features {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px;
+  }
+  .intro-feat {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: var(--radius); padding: 10px 12px;
+    font-size: 0.7rem; color: rgba(255,255,255,0.55); line-height: 1.5;
+  }
+  .intro-feat strong { color: var(--neon); font-weight: 600; display: block; margin-bottom: 2px; font-size: 0.72rem; }
+  .intro-btn {
+    width: 100%; background: var(--neon); color: #050510;
+    border: none; font-family: var(--display); font-weight: 700;
+    font-size: 0.72rem; letter-spacing: 3px; padding: 13px 24px;
+    border-radius: var(--radius); cursor: pointer;
+    box-shadow: 0 0 24px var(--neon-glow); transition: opacity 0.2s;
+  }
+  .intro-btn:hover { opacity: 0.85; }
+  .intro-remember {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    font-size: 0.62rem; color: rgba(255,255,255,0.35); font-family: var(--mono);
+    cursor: pointer; justify-content: center;
+  }
+  .intro-remember input { accent-color: var(--neon); }
+
+  /* ── Map loading overlay ───────────────────────────────────── */
+  #map-loading {
+    position: absolute; inset: 0; z-index: 50;
+    background: rgba(5,5,16,0.82); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px; pointer-events: none;
+    opacity: 1; transition: opacity 0.35s;
+  }
+  #map-loading.hidden { opacity: 0; }
+  .loading-ring {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.07);
+    border-top-color: var(--neon);
+    animation: spin 0.85s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-label {
+    font-family: var(--mono); font-size: 0.58rem; letter-spacing: 3px;
+    color: var(--neon); animation: blink 1.2s infinite;
+  }
+
+  /* ── Share button ──────────────────────────────────────────── */
+  .share-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim2); font-family: var(--mono); font-size: 0.58rem;
+    letter-spacing: 1px; padding: 3px 10px; border-radius: 2px;
+    transition: all 0.2s; cursor: pointer;
+  }
+  .share-btn:hover { border-color: var(--neon); color: var(--neon); }
+
+  /* ── Stat context badge ────────────────────────────────────── */
+  .stat-ctx {
+    font-size: 0.5rem; font-family: var(--mono); padding: 1px 5px;
+    border-radius: 2px; display: inline-block; margin-top: 3px;
+  }
+  .ctx-high { background:rgba(255,68,68,0.1); color:#ff6666; border:1px solid rgba(255,68,68,0.22); }
+  .ctx-low  { background:rgba(0,255,65,0.07); color:#00dd38; border:1px solid rgba(0,255,65,0.18); }
+  .ctx-avg  { background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.09); }
+
+  /* ── Korelasi narasi ───────────────────────────────────────── */
+  .korelasi-narasi {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: var(--radius); padding: 10px 12px; margin: 8px 0 12px;
+    font-size: 0.67rem; color: rgba(255,255,255,0.55); line-height: 1.65;
+  }
+  .korelasi-narasi em { color: var(--neon); font-style: normal; font-weight: 600; }
+
+  /* ── Toast notif ───────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--neon);
+    font-family: var(--mono); font-size: 0.62rem; letter-spacing: 1px;
+    color: var(--neon); padding: 8px 20px; border-radius: 2px;
+    z-index: 9999; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s;
+    white-space: nowrap; box-shadow: 0 0 16px var(--neon-glow);
+  }
+  #toast.show { opacity: 1; }
+
   /* Data source badges */
   .src-tag {
     display: inline-block; font-family: var(--mono); font-size: 0.5rem;
@@ -471,19 +583,63 @@
   /* ── Responsive ────────────────────────────────────────────── */
   @media (max-width: 768px) {
     aside {
-      position: fixed; top: 48px; left: 0; bottom: 0;
+      position: fixed; top: 48px; left: 0; bottom: 0; width: 85vw; max-width: 300px;
       transform: translateX(-100%); z-index: 300;
-      box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.7);
     }
     aside.open { transform: translateX(0); }
     #sidebar-toggle { display: flex; }
+    .logo { font-size: 0.78rem; letter-spacing: 3px; }
     .logo-sub { display: none; }
-    .hud-chip:not(:first-child) { display: none; }
-    #art-panel { width: 100%; right: -100%; }
+    .hud-chip { display: none; }
+    .hud-chip:first-child { display: flex; }
+    #clk { display: none; }
+    .metod-btn { display: none; }
+    .share-btn { display: none; }
+    #art-panel { width: 100vw; right: -100vw; }
+    #map-hint { font-size: 0.6rem; padding: 6px 14px; bottom: 70px; }
+    .intro-features { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    header { padding: 0 12px; height: 44px; }
+    .intro-box { margin: 0; }
+    .intro-head { padding: 18px 20px 12px; }
+    .intro-body { padding: 16px 20px 20px; }
+    .intro-logo { font-size: 1rem; }
+    .intro-desc { font-size: 0.78rem; }
   }
 </style>
 </head>
 <body>
+
+<!-- ── Intro Banner ─────────────────────────────────────────── -->
+<div id="intro-banner">
+  <div class="intro-box">
+    <div class="intro-head">
+      <div class="intro-logo">NEXUS // MAP</div>
+      <div class="intro-tagline">INDONESIA CRIME &amp; HEALTH SURVEILLANCE</div>
+    </div>
+    <div class="intro-body">
+      <p class="intro-desc">
+        Dashboard interaktif untuk memantau <strong style="color:var(--neon)">kriminalitas, kesehatan, dan bencana alam</strong>
+        di 34 provinsi Indonesia — berbasis data resmi BPS, Kemenkes, BNPB, dan BNN 2023.
+      </p>
+      <div class="intro-features">
+        <div class="intro-feat"><strong>&#9670; 5 Layer Data</strong>Kriminalitas, kekerasan seksual, penyakit menular, bencana alam, narkoba</div>
+        <div class="intro-feat"><strong>&#9632; Peta Interaktif</strong>Klik provinsi untuk melihat berita terkait dari wilayah tersebut</div>
+        <div class="intro-feat"><strong>&#9651; Analisis Korelasi</strong>Hubungan kemiskinan, IPM, dan angka kejadian per provinsi</div>
+        <div class="intro-feat"><strong>&#9679; Berita Real-time</strong>Artikel dari 40+ sumber RSS yang diperbarui otomatis</div>
+      </div>
+      <label class="intro-remember">
+        <input type="checkbox" id="intro-skip-cb"/> Jangan tampilkan lagi
+      </label>
+      <button class="intro-btn" onclick="closeIntroBanner()">MULAI EKSPLORASI &#8594;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast notifikasi ─────────────────────────────────────── -->
+<div id="toast"></div>
 
 <!-- ── Header ──────────────────────────────────────────────── -->
 <header>
@@ -502,6 +658,7 @@
     </div>
     <div class="hud-chip" id="hud-age" title="Waktu scraping terakhir">—</div>
     <div class="hud-chip" id="clk" style="font-family:'Orbitron',sans-serif;color:var(--neon)">--:--:--</div>
+    <button class="share-btn" onclick="shareMap()" title="Salin tautan peta ini">&#128279; BAGIKAN</button>
     <button class="metod-btn" onclick="document.getElementById('metod-overlay').classList.add('open')" title="Metodologi & Limitasi Data">&#9432; METODOLOGI</button>
   </div>
 </header>
@@ -564,12 +721,23 @@
       </div>
       <div id="stat-note" style="font-size:0.6rem;color:rgba(255,255,255,0.3);line-height:1.6;margin-bottom:10px;"></div>
       <div class="stats-grid">
-        <div class="stat-card"><div class="stat-lbl">Total</div><div class="stat-val" id="s-total">—</div></div>
-        <div class="stat-card"><div class="stat-lbl">Rata-rata/Prov</div><div class="stat-val" id="s-avg">—</div></div>
-        <div class="stat-card"><div class="stat-lbl">Tertinggi</div><div class="stat-val" id="s-max">—</div></div>
-        <div class="stat-card"><div class="stat-lbl">Terendah</div><div class="stat-val" id="s-min">—</div></div>
-        <div class="stat-card" title="Rata-rata per 100.000 penduduk. Populasi: BPS Proyeksi 2023">
+        <div class="stat-card wide">
+          <div class="stat-lbl">Total Kasus Nasional</div>
+          <div class="stat-val" id="s-total">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Rata-rata/Prov</div>
+          <div class="stat-val" id="s-avg">—</div>
+          <div id="s-avg-ctx"></div>
+        </div>
+        <div class="stat-card" title="Provinsi dengan jumlah kasus tertinggi">
+          <div class="stat-lbl">Tertinggi (absolut)</div>
+          <div class="stat-val" id="s-max">—</div>
+          <div id="s-max-ctx" style="font-size:0.52rem;color:rgba(255,255,255,0.3);margin-top:2px;"></div>
+        </div>
+        <div class="stat-card" title="Rata-rata per 100.000 penduduk. Makin tinggi = makin berisiko per kapita. Populasi: BPS Proyeksi 2023">
           <div class="stat-lbl">Per 100rb Jiwa &#9432;</div><div class="stat-val" id="s-per100k">—</div>
+          <div id="s-per100k-ctx"></div>
         </div>
         <div class="stat-card" title="Nilai tertinggi per 100.000 penduduk di antara semua provinsi">
           <div class="stat-lbl">Maks per 100rb &#9432;</div><div class="stat-val" id="s-per100k-max">—</div>
@@ -670,6 +838,9 @@
         Sumber: BPS 2023 (kemiskinan, pengangguran, IPM) · BNN 2023 (narkoba)
       </div>
 
+      <!-- Narasi otomatis -->
+      <div id="korelasi-narasi-1" class="korelasi-narasi">Menghitung korelasi...</div>
+
       <!-- Scatter: Kemiskinan vs Kriminalitas -->
       <div style="margin-bottom:4px;font-size:0.65rem;color:var(--neon)">
         &#9675; Kemiskinan (%) vs Kriminalitas per 100rb Jiwa
@@ -680,6 +851,7 @@
       <div id="scatter-tooltip" style="font-size:0.6rem;color:var(--neon);min-height:14px;margin:2px 0 8px"></div>
 
       <!-- Scatter: IPM vs Risk Score -->
+      <div id="korelasi-narasi-2" class="korelasi-narasi" style="margin-top:4px"></div>
       <div style="margin-bottom:4px;font-size:0.65rem;color:var(--neon)">
         &#9651; IPM vs Risk Score Komposit
       </div>
@@ -735,8 +907,12 @@
     <div class="c c-tl"></div><div class="c c-tr"></div>
     <div class="c c-bl"></div><div class="c c-br"></div>
     <div class="warn warn-live">&#9888;&nbsp;DATA RESMI 2023</div>
+    <div id="map-loading">
+      <div class="loading-ring"></div>
+      <div class="loading-label">MEMUAT PETA...</div>
+    </div>
     <iframe id="map-frame" src="maps/kriminalitas.html" title="Peta interaktif"></iframe>
-    <div id="map-hint">&#9650;&nbsp; Klik provinsi untuk melihat berita terkait</div>
+    <div id="map-hint">&#9650;&nbsp; Klik provinsi untuk lihat berita &nbsp;|&nbsp; &#9776; Buka menu kiri untuk ganti layer</div>
     <div class="hud-br">WGS84 · EPSG:4326 · &copy; NEXUS MAP SYS</div>
   </div>
 </div>
@@ -1136,11 +1312,11 @@ function _buildKorelasiRanking(tableId, sortKey, label, fmt) {
 
 function drawKorelasi(neon) {
   if (!KORELASI || !KORELASI.length) return;
-  // Tambahkan risk score ke data
   const riskMap = {};
   RISK_TOP10.forEach(r => riskMap[r[0]] = r[1]);
   const data = KORELASI.map(d => Object.assign({}, d, {risk: riskMap[d.p] || 0}));
 
+  _buildKorelasiNarasi();
   _drawScatter('scatter-kemiskinan', 'scatter-tooltip',
     data, 'x', 'y', 'Kemiskinan(%)', 'Krim/100k', neon);
   _drawScatter('scatter-ipm', 'scatter-ipm-tooltip',
@@ -1159,9 +1335,16 @@ function updateStats(s, neon, key) {
   document.getElementById('s-total').textContent = (s.total||0).toLocaleString('id-ID');
   document.getElementById('s-avg').textContent   = (s.avg||0).toLocaleString('id-ID');
   document.getElementById('s-max').textContent   = (s.max||0).toLocaleString('id-ID');
-  document.getElementById('s-min').textContent   = (s.min||0).toLocaleString('id-ID');
   document.getElementById('s-per100k').textContent     = (s.per100k_avg||0).toLocaleString('id-ID');
   document.getElementById('s-per100k-max').textContent = (s.per100k_max||0).toLocaleString('id-ID');
+
+  // Provinsi tertinggi di stat-max
+  const maxCtxEl = document.getElementById('s-max-ctx');
+  if (maxCtxEl && s.top && s.top.length) maxCtxEl.textContent = s.top[0][0];
+
+  // Context: berapa kali lipat dari rata-rata nasional
+  _setCtx('s-avg-ctx', s.avg||0, (s.total||0)/34);
+  _setCtx('s-per100k-ctx', s.per100k_avg||0, s.per100k_avg||0);
 
   const emptyRow = '<tr><td colspan="3" style="color:rgba(255,255,255,0.2);font-size:0.65rem;padding:6px">Belum ada data</td></tr>';
   document.getElementById('top-body').innerHTML  = (s.top||[]).map(([w,k],i) =>
@@ -1194,8 +1377,13 @@ function updateStats(s, neon, key) {
 }
 
 function _loadMap(src) {
-  const frame = document.getElementById('map-frame');
-  frame.onload = function() { _sendFilter(currentDays); };
+  const frame   = document.getElementById('map-frame');
+  const loading = document.getElementById('map-loading');
+  if (loading) loading.classList.remove('hidden');
+  frame.onload = function() {
+    _sendFilter(currentDays);
+    if (loading) loading.classList.add('hidden');
+  };
   frame.src = src;
 }
 
@@ -1253,6 +1441,114 @@ function switchCrimeType(jenis, btn) {
   }
 }
 
+// ── Intro banner ────────────────────────────────────────────────
+function closeIntroBanner() {
+  const banner = document.getElementById('intro-banner');
+  if (!banner) return;
+  banner.classList.add('hidden');
+  const cb = document.getElementById('intro-skip-cb');
+  if (cb && cb.checked) {
+    try { localStorage.setItem('nexus_intro_seen', '1'); } catch(e) {}
+  }
+}
+(function initIntroBanner() {
+  try {
+    if (localStorage.getItem('nexus_intro_seen') === '1') {
+      const b = document.getElementById('intro-banner');
+      if (b) b.classList.add('hidden');
+    }
+  } catch(e) {}
+})();
+
+// ── Toast notifikasi ─────────────────────────────────────────────
+function showToast(msg, duration) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration || 2800);
+}
+
+// ── Share / copy link ────────────────────────────────────────────
+function shareMap() {
+  const base = window.location.href.split('?')[0].split('#')[0];
+  const url  = base + '?layer=' + currentKey;
+  try {
+    navigator.clipboard.writeText(url).then(() => showToast('&#10003; Tautan disalin: ?' + currentKey));
+  } catch(e) {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('&#10003; Tautan disalin ke clipboard');
+  }
+}
+
+// Baca parameter ?layer= dari URL saat load
+(function applyUrlLayer() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const l = p.get('layer');
+    if (l && window.LAYERS && window.LAYERS[l]) {
+      window._initialLayer = l;
+    }
+  } catch(e) {}
+})();
+
+// ── Stat context badges ──────────────────────────────────────────
+function _setCtx(elId, val, avg, unit) {
+  const el = document.getElementById(elId);
+  if (!el || !avg) return;
+  const ratio = val / avg;
+  let cls = 'ctx-avg', txt = '≈ rata-rata';
+  if (ratio > 1.3)       { cls = 'ctx-high'; txt = '+' + Math.round((ratio-1)*100) + '% di atas rata-rata'; }
+  else if (ratio < 0.7)  { cls = 'ctx-low';  txt = Math.round((1-ratio)*100) + '% di bawah rata-rata'; }
+  el.innerHTML = '<span class="stat-ctx ' + cls + '">' + txt + '</span>';
+}
+
+// ── Korelasi narasi ──────────────────────────────────────────────
+function _pearson(xs, ys) {
+  const n = xs.length;
+  const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+  const cov = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0);
+  const sx  = Math.sqrt(xs.reduce((s,x)=>s+(x-mx)**2,0));
+  const sy  = Math.sqrt(ys.reduce((s,y)=>s+(y-my)**2,0));
+  return (sx*sy > 0) ? cov/(sx*sy) : 0;
+}
+function _buildKorelasiNarasi() {
+  if (!KORELASI || !KORELASI.length) return;
+  const riskMap = {};
+  RISK_TOP10.forEach(r => riskMap[r[0]] = r[1]);
+  const data = KORELASI.map(d => Object.assign({}, d, {risk: riskMap[d.p] || 0}));
+
+  // Korelasi 1: kemiskinan vs kriminalitas
+  const r1 = _pearson(data.map(d=>d.x), data.map(d=>d.y));
+  const topKem = [...data].sort((a,b)=>b.x-a.x)[0];
+  const topKrim = [...data].sort((a,b)=>b.y-a.y)[0];
+  let dir1, dir1txt;
+  if (r1 > 0.4)       { dir1 = 'positif'; dir1txt = 'Artinya, provinsi dengan kemiskinan lebih tinggi cenderung memiliki kasus kriminalitas per kapita yang lebih tinggi pula.'; }
+  else if (r1 < -0.4) { dir1 = 'negatif'; dir1txt = 'Artinya, hubungan antara kemiskinan dan kriminalitas per kapita tidak linear — faktor lain seperti kepadatan kota atau akses layanan turut berperan.'; }
+  else                { dir1 = 'lemah';   dir1txt = 'Korelasi tidak kuat — faktor lain seperti kepadatan kota, akses hukum, dan urbanisasi berpengaruh lebih besar terhadap kriminalitas.'; }
+  const n1El = document.getElementById('korelasi-narasi-1');
+  if (n1El) n1El.innerHTML =
+    'Korelasi kemiskinan–kriminalitas: <em>r = ' + r1.toFixed(2) + ' (' + dir1 + ')</em>. ' + dir1txt +
+    ' Provinsi termiskin: <em>' + topKem.p + ' (' + topKem.x + '%)</em>. ' +
+    'Kriminalitas/100rb tertinggi: <em>' + topKrim.p + ' (' + topKrim.y + ')</em>.';
+
+  // Korelasi 2: IPM vs risk score
+  const r2 = _pearson(data.map(d=>d.ipm), data.map(d=>d.risk));
+  const topRisk = [...data].sort((a,b)=>b.risk-a.risk)[0];
+  let dir2txt;
+  if (r2 < -0.3)      dir2txt = 'Provinsi dengan IPM lebih tinggi cenderung memiliki risk score lebih rendah — kapasitas daerah yang lebih baik mampu meredam dampak ancaman.';
+  else if (r2 > 0.3)  dir2txt = 'Hubungan tidak linier — IPM tinggi tidak selalu berarti risiko rendah, kemungkinan karena urbanisasi meningkatkan paparan beberapa kategori risiko.';
+  else                dir2txt = 'Hubungan IPM dan risk score tidak kuat secara keseluruhan — distribusi risiko dipengaruhi banyak faktor struktural.';
+  const n2El = document.getElementById('korelasi-narasi-2');
+  if (n2El) n2El.innerHTML =
+    'Korelasi IPM–risiko: <em>r = ' + r2.toFixed(2) + '</em>. ' + dir2txt +
+    ' Risk score tertinggi: <em>' + (topRisk ? topRisk.p + ' (' + topRisk.risk.toFixed(1) + ')' : '—') + '</em>.';
+}
+
 // Jam digital
 setInterval(() => {
   document.getElementById('clk').textContent =
@@ -1301,14 +1597,28 @@ updateSystemStatus();
 setInterval(updateSystemStatus, 60000);
 
 document.addEventListener('DOMContentLoaded', () => {
-  const firstBtn = document.querySelector('.layer-btn');
-  if (firstBtn) switchLayer(firstBtn.dataset.key, firstBtn);
+  // Terapkan layer dari URL param jika ada
+  const initLayer = window._initialLayer;
+  let startBtn = null;
+  if (initLayer) {
+    startBtn = document.querySelector('.layer-btn[data-key="' + initLayer + '"]');
+  }
+  if (!startBtn) startBtn = document.querySelector('.layer-btn');
+  if (startBtn) switchLayer(startBtn.dataset.key, startBtn);
   updateSystemStatus();
-  // Auto-hide onboarding hint setelah 8 detik
+  // iframe pertama kali sudah src default — tunggu load lalu hide loading
+  const frame = document.getElementById('map-frame');
+  const loading = document.getElementById('map-loading');
+  if (frame && loading) {
+    frame.addEventListener('load', () => loading.classList.add('hidden'), {once: true});
+    // Fallback hide jika sudah loaded (cache)
+    setTimeout(() => loading && loading.classList.add('hidden'), 4000);
+  }
+  // Auto-hide onboarding hint setelah 10 detik
   setTimeout(() => {
     const hint = document.getElementById('map-hint');
     if (hint && !hint.classList.contains('hidden')) hint.classList.add('hidden');
-  }, 8000);
+  }, 10000);
 });
 </script>
 </body>
